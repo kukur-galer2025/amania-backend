@@ -5,48 +5,45 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\EProduct;
 use App\Models\EProductPurchase;
+use App\Models\SkdTransaction;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 
 class CheckoutController extends Controller
 {
-    public function __construct()
-    {
-        \Midtrans\Config::$serverKey    = env('MIDTRANS_SERVER_KEY');
-        \Midtrans\Config::$isProduction = false;
-        \Midtrans\Config::$isSanitized  = true;
-        \Midtrans\Config::$is3ds        = true;
-    }
-
     /**
-     * Fungsi Checkout Member
+     * =========================================================================
+     * 1. FUNGSI CHECKOUT E-PRODUCT (MENGGUNAKAN TRIPAY)
+     * =========================================================================
      */
     public function purchaseEProduct(Request $request)
     {
-        $request->validate(['e_product_id' => 'required|exists:e_products,id']);
+        // Frontend E-Product sekarang WAJIB mengirim "method" (misal: QRIS, MYBVA)
+        $request->validate([
+            'e_product_id' => 'required|exists:e_products,id',
+            'method'       => 'required|string', 
+        ]);
 
         $user    = $request->user();
         $product = EProduct::where('is_published', true)->findOrFail($request->e_product_id);
 
-        // 1. Cek apakah user sudah pernah beli dan statusnya success
         $alreadyBought = EProductPurchase::where('user_id', $user->id)
             ->where('e_product_id', $product->id)
             ->where('status', 'success')
             ->exists();
 
         if ($alreadyBought) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Anda sudah memiliki produk ini.'
-            ], 400);
+            return response()->json(['success' => false, 'message' => 'Anda sudah memiliki produk ini.'], 400);
         }
 
+        // Prefix "INV-EP-" untuk membedakan E-Product dari SKD Tryout
         $invoiceCode = 'INV-EP-' . strtoupper(Str::random(8));
 
         DB::beginTransaction();
         try {
-            // 2. Buat Data Transaksi di Database
             $purchase = EProductPurchase::create([
                 'invoice_code' => $invoiceCode,
                 'user_id'      => $user->id,
@@ -55,7 +52,6 @@ class CheckoutController extends Controller
                 'status'       => 'pending',
             ]);
 
-            // 3. Jika Produk Gratis, Langsung Success
             if ($product->price == 0) {
                 $purchase->update(['status' => 'success']);
                 DB::commit();
@@ -67,89 +63,120 @@ class CheckoutController extends Controller
                 ]);
             }
 
-            // 4. Jika Berbayar, Tembak API Midtrans — HANYA SEKALI
-            $params = [
-                'transaction_details' => [
-                    'order_id'     => $invoiceCode,
-                    'gross_amount' => (int) $product->price, // pastikan integer
+            // --- TRIPAY LOGIC UNTUK E-PRODUCT ---
+            $amount = (int) $product->price;
+            $privateKey = config('tripay.private_key');
+            $merchantCode = config('tripay.merchant_code');
+            $signature = hash_hmac('sha256', $merchantCode . $invoiceCode . $amount, $privateKey);
+
+            $payload = [
+                'method'         => $request->method,
+                'merchant_ref'   => $invoiceCode,
+                'amount'         => $amount,
+                'customer_name'  => $user->name ?? 'Member Amania',
+                'customer_email' => $user->email ?? 'email@amania.id',
+                'customer_phone' => $user->phone ?? '081234567890',
+                'order_items'    => [
+                    [
+                        'name'     => substr($product->title, 0, 50),
+                        'price'    => $amount,
+                        'quantity' => 1,
+                    ]
                 ],
-                'item_details' => [[
-                    'id'       => $product->id,
-                    'price'    => (int) $product->price,
-                    'quantity' => 1,
-                    'name'     => substr($product->title, 0, 50),
-                ]],
-                'customer_details' => [
-                    'first_name' => substr($user->name, 0, 20),
-                    'email'      => $user->email,
-                ],
+                'return_url'   => config('app.frontend_url') . '/e-products/library',
+                'expired_time' => (time() + (24 * 60 * 60)),
+                'signature'    => $signature
             ];
 
-            // ✅ PERBAIKAN UTAMA: Panggil createTransaction SEKALI SAJA
-            // Ambil token dan redirect_url dari objek yang sama
-            $transaction = \Midtrans\Snap::createTransaction($params);
-            $snapToken   = $transaction->token;
-            $paymentUrl  = $transaction->redirect_url;
+            $response = Http::withToken(config('tripay.api_key'))->post(config('tripay.api_url') . 'transaction/create', $payload);
+            $result = $response->json();
 
-            $purchase->update([
-                'snap_token'  => $snapToken,
-                'payment_url' => $paymentUrl,
-            ]);
+            if ($response->successful() && isset($result['success']) && $result['success'] == true) {
+                // Kita gunakan snap_token untuk simpan "reference" dan payment_url untuk "checkout_url"
+                $purchase->update([
+                    'snap_token'  => $result['data']['reference'], 
+                    'payment_url' => $result['data']['checkout_url'],
+                ]);
+                DB::commit();
 
-            DB::commit();
+                return response()->json([
+                    'success'     => true,
+                    'message'     => 'Silakan lakukan pembayaran.',
+                    'payment_url' => $result['data']['checkout_url'],
+                    'reference'   => $result['data']['reference'],
+                ]);
+            }
 
-            return response()->json([
-                'success'     => true,
-                'message'     => 'Silakan lakukan pembayaran.',
-                'snap_token'  => $snapToken,
-                'payment_url' => $paymentUrl,
-            ]);
+            DB::rollBack();
+            return response()->json(['success' => false, 'message' => 'Tripay: ' . ($result['message'] ?? 'Error')], 400);
 
         } catch (\Exception $e) {
             DB::rollBack();
-            return response()->json([
-                'success' => false,
-                'message' => 'Terjadi kesalahan gateway.',
-                'error'   => $e->getMessage()
-            ], 500);
+            return response()->json(['success' => false, 'message' => 'Terjadi kesalahan sistem.', 'error' => $e->getMessage()], 500);
         }
     }
 
     /**
-     * Fungsi Webhook (Pendengar Laporan Midtrans)
-     * Route ini HARUS bisa diakses tanpa login (Public)
+     * =========================================================================
+     * 2. UNIVERSAL WEBHOOK TRIPAY (MENANGANI SKD & E-PRODUCT)
+     * =========================================================================
      */
-    public function webhook(Request $request)
+    public function tripayWebhook(Request $request)
     {
-        $serverKey = env('MIDTRANS_SERVER_KEY');
+        $callbackSignature = $request->server('HTTP_X_CALLBACK_SIGNATURE');
+        $json = $request->getContent();
+        $signature = hash_hmac('sha256', $json, config('tripay.private_key'));
 
-        // 1. Validasi Keamanan (Signature Key) dari Midtrans
-        $hashed = hash('sha512',
-            $request->order_id .
-            $request->status_code .
-            $request->gross_amount .
-            $serverKey
-        );
-
-        if ($hashed !== $request->signature_key) {
-            return response()->json(['message' => 'Akses ditolak. Signature tidak valid.'], 403);
+        // 1. Validasi Keamanan Signature
+        if ($signature !== $callbackSignature) {
+            Log::warning('Tripay Webhook: Invalid Signature');
+            return response()->json(['success' => false, 'message' => 'Invalid signature'], 403);
         }
 
-        // 2. Cari Transaksi
-        $purchase = EProductPurchase::where('invoice_code', $request->order_id)->first();
-        if (!$purchase) {
-            return response()->json(['message' => 'Pesanan tidak ditemukan.'], 404);
+        // 2. Validasi Event
+        if ('payment_status' !== $request->server('HTTP_X_CALLBACK_EVENT')) {
+            return response()->json(['success' => false, 'message' => 'Unrecognized callback event'], 400);
         }
 
-        // 3. Update Status Sesuai Laporan Midtrans
-        $transactionStatus = $request->transaction_status;
+        $data = json_decode($json);
+        $merchantRef = $data->merchant_ref;
+        $status = $data->status; // 'PAID', 'UNPAID', 'EXPIRED', 'FAILED'
 
-        if (in_array($transactionStatus, ['capture', 'settlement'])) {
-            $purchase->update(['status' => 'success']);
-        } elseif (in_array($transactionStatus, ['cancel', 'deny', 'expire'])) {
-            $purchase->update(['status' => 'failed']);
+        // 3. CABANG LOGIKA BERDASARKAN PREFIX INVOICE
+        try {
+            if (Str::startsWith($merchantRef, 'SKD-')) {
+                // --- A. LOGIKA SKD TRYOUT ---
+                $transaction = SkdTransaction::where('merchant_ref', $merchantRef)->first();
+                if (!$transaction) return response()->json(['success' => false, 'message' => 'Transaction not found'], 404);
+
+                if ($status === 'PAID') {
+                    $transaction->update(['status' => 'PAID', 'paid_at' => now()]);
+                } elseif (in_array($status, ['EXPIRED', 'FAILED'])) {
+                    $transaction->update(['status' => $status]);
+                }
+            } 
+            elseif (Str::startsWith($merchantRef, 'INV-EP-')) {
+                // --- B. LOGIKA E-PRODUCT ---
+                $purchase = EProductPurchase::where('invoice_code', $merchantRef)->first();
+                if (!$purchase) return response()->json(['success' => false, 'message' => 'Purchase not found'], 404);
+
+                // Tabel EProductPurchase menggunakan status: 'pending', 'success', 'failed'
+                if ($status === 'PAID') {
+                    $purchase->update(['status' => 'success']);
+                } elseif (in_array($status, ['EXPIRED', 'FAILED'])) {
+                    $purchase->update(['status' => 'failed']);
+                }
+            } 
+            else {
+                Log::warning('Tripay Webhook: Unknown Merchant Ref format => ' . $merchantRef);
+                return response()->json(['success' => false, 'message' => 'Format Merchant Ref tidak dikenali'], 400);
+            }
+
+            return response()->json(['success' => true, 'message' => 'Status transaksi berhasil diupdate.']);
+
+        } catch (\Exception $e) {
+            Log::error('Tripay Webhook Error: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Internal server error'], 500);
         }
-
-        return response()->json(['message' => 'Status transaksi berhasil diupdate.']);
     }
 }

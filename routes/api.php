@@ -15,6 +15,10 @@ use App\Http\Controllers\Api\GlobalSearchController;
 use App\Http\Controllers\Api\EProductController;
 use App\Http\Controllers\Api\CheckoutController;
 
+// 🔥 IMPORT CONTROLLER PUBLIK & CHECKOUT TRYOUT SKD 🔥
+use App\Http\Controllers\Api\Tryout\Skd\PublicSkdTryoutController;
+use App\Http\Controllers\Api\Tryout\Skd\SkdCheckoutController;
+
 // --- 2. Import Admin Controllers ---
 use App\Http\Controllers\Api\Admin\EventController as AdminEvent;
 use App\Http\Controllers\Api\Admin\RegistrationController as AdminReg;
@@ -30,6 +34,13 @@ use App\Http\Controllers\Api\Admin\ReportController as AdminReport;
 use App\Http\Controllers\Api\Admin\GlobalSearchController as AdminGlobalSearch;
 use App\Http\Controllers\Api\Admin\NotificationController as AdminNotification;
 use App\Http\Controllers\Api\Admin\EProductController as AdminEProduct;
+use App\Http\Controllers\Api\Admin\ImageUploadController;
+
+// 🔥 3. IMPORT ADMIN TRYOUT CONTROLLERS 🔥
+use App\Http\Controllers\Api\Admin\Tryout\Skd\SkdTryoutController;
+use App\Http\Controllers\Api\Admin\Tryout\Skd\SkdQuestionController;
+use App\Http\Controllers\Api\Admin\Tryout\Skd\SkdQuestionSubCategoryController;
+use App\Http\Controllers\Api\Admin\Tryout\Skd\SkdTryoutCategoryController;
 
 /*
 |--------------------------------------------------------------------------
@@ -38,7 +49,7 @@ use App\Http\Controllers\Api\Admin\EProductController as AdminEProduct;
 */
 
 // =========================================================================
-// SECTION 1: PUBLIC ROUTES (Guest & User Bisa Akses)
+// SECTION 1: PUBLIC ROUTES (Dapat diakses tanpa Login)
 // =========================================================================
 Route::post('/login', [AuthController::class, 'login']);
 Route::post('/register', [AuthController::class, 'register']);
@@ -56,11 +67,18 @@ Route::get('/global-search', [GlobalSearchController::class, 'search']);
 Route::get('/e-products', [EProductController::class, 'index']);
 Route::get('/e-products/{slug}', [EProductController::class, 'show']);
 
-// 🔥 ROUTE WEBHOOK MIDTRANS (HARUS PUBLIC!) 🔥
-Route::post('/webhooks/midtrans', [CheckoutController::class, 'webhook']);
+// 🔥 WEBHOOK / CALLBACK TRIPAY (WAJIB PUBLIC) 🔥
+Route::post('/tripay/callback', [CheckoutController::class, 'tripayWebhook']);
+
+// 🔥 RUTE PUBLIK TRYOUT SKD 🔥
+Route::prefix('tryout/skd')->group(function () {
+    Route::get('/katalog', [PublicSkdTryoutController::class, 'katalog']);
+    Route::get('/categories-list', [SkdTryoutCategoryController::class, 'index']);
+});
+
 
 // =========================================================================
-// SECTION 2: MEMBER ROUTES (Wajib Login - Role User & Admin)
+// SECTION 2: MEMBER ROUTES (Wajib Login)
 // =========================================================================
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/user', function (Request $request) {
@@ -76,29 +94,34 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/notifications', [NotificationController::class, 'index']);
     Route::post('/notifications/read', [NotificationController::class, 'markAllAsRead']);
     
-    // Proses Checkout Member
+    // Checkout E-Product dengan Tripay (frontend harus mengirim 'method' bank/qris)
     Route::post('/checkout/e-product', [CheckoutController::class, 'purchaseEProduct']);
-    
-    // 🔥 TAMBAHAN RUTE SUBMIT ULASAN E-PRODUK 🔥
     Route::post('/e-products/{id}/reviews', [EProductController::class, 'submitReview']);
+
+    // 🔥 RUTE CHECKOUT TRYOUT SKD (TRIPAY) 🔥
+    Route::prefix('tryout/skd')->group(function () {
+        Route::get('/payment-channels', [SkdCheckoutController::class, 'getPaymentChannels']);
+        Route::post('/checkout', [SkdCheckoutController::class, 'createTransaction']);
+    });
 });
 
+
 // =========================================================================
-// SECTION 3A: RUTE MULTI-TENANT (Hanya Role: superadmin | organizer)
+// SECTION 3A: RUTE MULTI-TENANT (Superadmin | Organizer)
 // =========================================================================
 Route::middleware(['auth:sanctum', 'role:superadmin|organizer'])
     ->prefix('admin')
     ->group(function () {
     
     Route::get('/dashboard', [AdminDashboard::class, 'index']);
+    Route::post('/upload-image', [ImageUploadController::class, 'upload']);
 
-    // Kelola Event
+    // Kelola Event dkk
     Route::get('/events', [AdminEvent::class, 'index']);
     Route::get('/events/{id}', [AdminEvent::class, 'show']);
     Route::post('/events', [AdminEvent::class, 'store']);
     Route::post('/events/{id}', [AdminEvent::class, 'update']); 
     Route::delete('/events/{id}', [AdminEvent::class, 'destroy']);
-
     Route::post('/materials', [AdminMaterial::class, 'store']);
     Route::delete('/materials/{id}', [AdminMaterial::class, 'destroy']);
     Route::post('/speakers', [AdminSpeaker::class, 'store']); 
@@ -109,14 +132,13 @@ Route::middleware(['auth:sanctum', 'role:superadmin|organizer'])
     Route::post('/registrations/{id}/verify', [AdminReg::class, 'verify']);
     Route::post('/registrations/{id}/reject', [AdminReg::class, 'reject']); 
     Route::post('/registrations/{id}/pending', [AdminReg::class, 'markAsPending']); 
-
     Route::get('/transactions', [AdminTransaction::class, 'index']);
     Route::get('/tickets', [AdminTicket::class, 'index']);
     Route::post('/tickets/scan', [AdminTicket::class, 'check']);
     Route::get('/reports', [AdminReport::class, 'index']);
     Route::get('/reports/export', [AdminReport::class, 'export']);
 
-    // 🔥 CMS ARTIKEL DIPINDAHKAN KESINI AGAR ORGANIZER BISA NULIS 🔥
+    // CMS Artikel
     Route::get('/article-categories', [AdminCategory::class, 'index']);
     Route::get('/articles', [AdminArticle::class, 'index']);
     Route::get('/articles/{id}', [AdminArticle::class, 'show']); 
@@ -124,34 +146,59 @@ Route::middleware(['auth:sanctum', 'role:superadmin|organizer'])
     Route::post('/articles/{id}', [AdminArticle::class, 'update']); 
     Route::delete('/articles/{id}', [AdminArticle::class, 'destroy']);
 
+    // =====================================================================
+    // 🔥 MANAJEMEN TRYOUT (SKD) 🔥
+    // =====================================================================
+    Route::prefix('tryout/skd')->group(function () {
+        Route::get('/tryout-categories', [SkdTryoutCategoryController::class, 'index']);
+        Route::post('/tryout-categories', [SkdTryoutCategoryController::class, 'store']);
+        Route::put('/tryout-categories/{id}', [SkdTryoutCategoryController::class, 'update']);
+        Route::delete('/tryout-categories/{id}', [SkdTryoutCategoryController::class, 'destroy']);
+
+        Route::get('/sub-categories', [SkdQuestionSubCategoryController::class, 'index']);
+        Route::post('/sub-categories', [SkdQuestionSubCategoryController::class, 'store']);
+        Route::put('/sub-categories/{id}', [SkdQuestionSubCategoryController::class, 'update']);
+        Route::delete('/sub-categories/{id}', [SkdQuestionSubCategoryController::class, 'destroy']);
+
+        Route::get('/tryouts', [SkdTryoutController::class, 'index']);
+        Route::get('/tryouts/{id}', [SkdTryoutController::class, 'show']);
+        Route::post('/tryouts', [SkdTryoutController::class, 'store']);
+        Route::put('/tryouts/{id}', [SkdTryoutController::class, 'update']);
+        Route::delete('/tryouts/{id}', [SkdTryoutController::class, 'destroy']);
+
+        Route::get('/questions', [SkdQuestionController::class, 'index']);
+        Route::get('/questions/{id}', [SkdQuestionController::class, 'show']);
+        Route::post('/questions', [SkdQuestionController::class, 'store']);
+        Route::put('/questions/{id}', [SkdQuestionController::class, 'update']);
+        Route::delete('/questions/{id}', [SkdQuestionController::class, 'destroy']);
+    });
+
     Route::get('/global-search', [AdminGlobalSearch::class, 'search']);
     Route::get('/notifications', [AdminNotification::class, 'index']);
     Route::post('/notifications/read', [AdminNotification::class, 'markAllAsRead']);
 });
 
+
 // =========================================================================
-// SECTION 3B: RUTE EKSKLUSIF SUPERADMIN (Hanya Role: superadmin)
+// SECTION 3B: RUTE EKSKLUSIF SUPERADMIN
 // =========================================================================
 Route::middleware(['auth:sanctum', 'role:superadmin'])
     ->prefix('admin')
     ->group(function () {
     
-    // 🔥 KELOLA USER (Di sinilah fitur Tambah Organizer & Edit berada)
     Route::get('/users', [AdminUser::class, 'index']);
-    Route::post('/users', [AdminUser::class, 'store']); // Rute Create User
-    Route::put('/users/{id}', [AdminUser::class, 'update']); // 🔥 INI SUDAH DIUBAH MENJADI PUT 🔥
+    Route::post('/users', [AdminUser::class, 'store']); 
+    Route::put('/users/{id}', [AdminUser::class, 'update']); 
     Route::post('/users/{id}/reset-password', [AdminUser::class, 'resetPassword']);
     Route::delete('/users/{id}', [AdminUser::class, 'destroy']);
     
-    // Kelola Kategori Artikel tetap khusus Superadmin
     Route::post('/article-categories', [AdminCategory::class, 'store']);
     Route::put('/article-categories/{id}', [AdminCategory::class, 'update']);
     Route::delete('/article-categories/{id}', [AdminCategory::class, 'destroy']);
 
-    // Kelola E-Produk (Katalog Digital)
     Route::get('/e-products', [AdminEProduct::class, 'index']);
     Route::get('/e-products/{id}', [AdminEProduct::class, 'show']);
     Route::post('/e-products', [AdminEProduct::class, 'store']);
-    Route::post('/e-products/{id}', [AdminEProduct::class, 'update']); // Update pakai POST karena ada File
+    Route::post('/e-products/{id}', [AdminEProduct::class, 'update']); 
     Route::delete('/e-products/{id}', [AdminEProduct::class, 'destroy']);
 });
