@@ -15,22 +15,21 @@ class ArticleSeeder extends Seeder
      */
     public function run(): void
     {
-        // 1. Pastikan ada minimal 1 user (Superadmin/Author) untuk user_id
+        // 1. Buat User Admin (Jika belum ada) untuk Author
         $author = User::firstOrCreate(
             ['email' => 'admin@amania.id'],
             [
-                'name' => 'Admin Amania',
+                'name' => 'Tim Redaksi Amania',
                 'password' => bcrypt('password123'),
-                'role' => 'superadmin', // Sesuaikan dengan kolom role di tabel User kamu
+                'role' => 'superadmin',
             ]
         );
 
-        // 2. Buat Kategori Artikel Asli
+        // 2. Buat Kategori Artikel
         $categories = [
             'Info CPNS & Kedinasan',
-            'Teknologi & Programming',
-            'Pengembangan Karir',
-            'Tips & Trik Belajar'
+            'Tips Lulus Ujian',
+            'Motivasi Belajar'
         ];
 
         $categoryMap = [];
@@ -42,100 +41,106 @@ class ArticleSeeder extends Seeder
             $categoryMap[$catName] = $category->id;
         }
 
-        // 3. Data Artikel Asli (Real Content)
+        // 3. Data 3 Artikel REAL & PROFESIONAL
         $articles = [
             [
-                'title' => 'Jadwal dan Syarat Pendaftaran CPNS 2026: Persiapkan Dirimu Dari Sekarang!',
+                'title' => 'Panduan Lengkap Persiapan CPNS 2026: Syarat, Alur, dan Strategi Lulus',
                 'article_category_id' => $categoryMap['Info CPNS & Kedinasan'],
                 'image' => 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?q=80&w=800&auto=format&fit=crop',
                 'read_time' => 5,
                 'is_published' => true,
-                'tags' => ['CPNS 2026', 'SKD', 'Info Terbaru', 'Kedinasan'],
+                'tags' => ['CPNS 2026', 'Syarat Pendaftaran', 'PNS', 'KemenpanRB'],
                 'content' => '
-                    <h2>Pendaftaran CPNS 2026 Segera Dibuka</h2>
-                    <p>Pemerintah melalui Kementerian Pendayagunaan Aparatur Negara dan Reformasi Birokrasi (KemenPAN-RB) kembali memberi sinyal kuat akan dibukanya seleksi CPNS tahun 2026. Fokus formasi tahun ini diprediksi masih berpusat pada tenaga pendidikan, tenaga kesehatan, dan talenta digital.</p>
-                    <p>Bagi Anda yang bermimpi menjadi Abdi Negara, persiapan yang matang adalah kunci utama. Ujian berbasis <strong>Computer Assisted Test (CAT)</strong> membutuhkan kecepatan dan ketepatan.</p>
-                    <h3>Tahapan Seleksi yang Harus Dilalui:</h3>
+                    <h2>Pendaftaran CPNS 2026 Akan Segera Dibuka</h2>
+                    <p>Pemerintah melalui Kementerian Pendayagunaan Aparatur Negara dan Reformasi Birokrasi (KemenPAN-RB) terus melakukan evaluasi kebutuhan Aparatur Sipil Negara (ASN). Diperkirakan pada tahun 2026, rekrutmen CPNS akan kembali dibuka dengan fokus pada formasi tenaga pendidikan, tenaga kesehatan, dan talenta digital.</p>
+                    
+                    <h3>1. Persyaratan Umum yang Wajib Disiapkan</h3>
+                    <p>Berdasarkan rekrutmen tahun-tahun sebelumnya, ada beberapa dokumen krusial yang wajib Anda siapkan dari sekarang agar tidak terburu-buru saat portal SSCASN dibuka:</p>
                     <ul>
-                        <li><strong>Seleksi Administrasi:</strong> Pastikan dokumen seperti Ijazah, Transkrip Nilai, dan e-KTP valid.</li>
-                        <li><strong>Seleksi Kompetensi Dasar (SKD):</strong> Terdiri dari Tes Wawasan Kebangsaan (TWK), Tes Intelegensia Umum (TIU), dan Tes Karakteristik Pribadi (TKP).</li>
-                        <li><strong>Seleksi Kompetensi Bidang (SKB):</strong> Tes spesifik sesuai formasi yang dilamar.</li>
+                        <li><strong>Scan KTP Asli</strong> (Maksimal 200kb, format JPEG/JPG)</li>
+                        <li><strong>Pas Foto Terbaru</strong> dengan latar belakang merah</li>
+                        <li><strong>Ijazah Asli dan Transkrip Nilai</strong> (Bukan Surat Keterangan Lulus / SKL)</li>
+                        <li><strong>Surat Lamaran dan Surat Pernyataan</strong> (Biasanya format diunduh langsung dari instansi terkait e-meterai)</li>
                     </ul>
-                    <p>Jangan tunggu jadwal resmi keluar baru belajar! Gunakan layanan <strong>Tryout SKD Amania</strong> untuk mensimulasikan ujian CAT BKN lengkap dengan soal HOTS terbaru.</p>
+
+                    <h3>2. Alur Seleksi CPNS</h3>
+                    <p>Perjalanan menjadi seorang PNS tidaklah instan. Anda harus melewati 3 tahapan utama:</p>
+                    <ul>
+                        <li><strong>Seleksi Administrasi:</strong> Tahap pencocokan dokumen. Kesalahan kecil (seperti salah unggah dokumen) bisa berakibat fatal.</li>
+                        <li><strong>Seleksi Kompetensi Dasar (SKD):</strong> Menggunakan sistem Computer Assisted Test (CAT) BKN. Meliputi Tes Wawasan Kebangsaan (TWK), Tes Intelegensia Umum (TIU), dan Tes Karakteristik Pribadi (TKP).</li>
+                        <li><strong>Seleksi Kompetensi Bidang (SKB):</strong> Ujian spesifik sesuai dengan formasi jabatan yang Anda lamar.</li>
+                    </ul>
+
+                    <p><strong>Tips Amania:</strong> Jangan menunggu jadwal resmi rilis untuk mulai belajar. Kompetitor Anda sudah belajar sejak hari ini. Mulailah rutinitas harian dengan mengerjakan soal-soal latihan SKD untuk membangun insting dan kecepatan berpikir Anda.</p>
                 ',
             ],
             [
-                'title' => 'Mengenal VILT Stack: Kombinasi Ampuh Vue, Inertia, Laravel, dan Tailwind',
-                'article_category_id' => $categoryMap['Teknologi & Programming'],
-                'image' => 'https://images.unsplash.com/photo-1498050108023-c5249f4df085?q=80&w=800&auto=format&fit=crop',
-                'read_time' => 7,
-                'is_published' => true,
-                'tags' => ['Laravel', 'Vue JS', 'Web Development', 'Programming'],
-                'content' => '
-                    <h2>Apa itu VILT Stack?</h2>
-                    <p>Dalam dunia Web Development modern, membangun aplikasi <em>Single Page Application (SPA)</em> seringkali dianggap rumit karena harus memisahkan Backend (API) dan Frontend secara penuh. Namun, dengan hadirnya <strong>VILT Stack</strong> (Vue.js, Inertia.js, Laravel, Tailwind CSS), paradigma itu berubah drastis.</p>
-                    <p>VILT Stack memungkinkan developer membangun aplikasi berskala besar layaknya SPA, namun dengan cara kerja routing dan controller klasik ala Laravel. Anda tidak perlu pusing memikirkan manajemen state yang kompleks seperti Redux atau Vuex.</p>
-                    <h3>Kelebihan Menggunakan VILT Stack:</h3>
-                    <ul>
-                        <li><strong>Pengembangan Lebih Cepat:</strong> Tidak perlu membuat API terpisah. Cukup kembalikan data melalui <code>Inertia::render()</code> dari controller Laravel Anda.</li>
-                        <li><strong>Performa Tinggi:</strong> Navigasi antar halaman dilakukan tanpa reload penuh berkat Inertia.js.</li>
-                        <li><strong>Desain Modern:</strong> Tailwind CSS memberikan kebebasan styling langsung dari class HTML tanpa perlu menulis file CSS terpisah.</li>
-                    </ul>
-                    <p>Bagi mahasiswa Informatika atau pemula yang ingin terjun ke dunia Full-stack Development, menguasai VILT Stack (atau TALL stack dengan Livewire) adalah nilai jual yang sangat tinggi di industri saat ini.</p>
-                ',
-            ],
-            [
-                'title' => 'Strategi Menaklukkan Soal TKP CPNS dengan Skor Maksimal',
-                'article_category_id' => $categoryMap['Tips & Trik Belajar'],
+                'title' => 'Rahasia Menaklukkan Tes Karakteristik Pribadi (TKP) dengan Skor Maksimal',
+                'article_category_id' => $categoryMap['Tips Lulus Ujian'],
                 'image' => 'https://images.unsplash.com/photo-1434030216411-0b793f4b4173?q=80&w=800&auto=format&fit=crop',
                 'read_time' => 4,
                 'is_published' => true,
-                'tags' => ['SKD CPNS', 'Tips Lulus', 'TKP', 'PNS'],
+                'tags' => ['TKP', 'SKD', 'Tips Menjawab', 'Passing Grade'],
                 'content' => '
-                    <h2>Mengapa TKP Sering Menjadi Momok?</h2>
-                    <p>Tes Karakteristik Pribadi (TKP) adalah salah satu bagian dari SKD CPNS yang tidak memiliki jawaban benar atau salah mutlak. Setiap opsi jawaban memiliki bobot nilai dari 1 hingga 5. Banyak peserta gagal melewati <em>Passing Grade</em> TKP karena salah dalam memilih sudut pandang saat menjawab.</p>
-                    <h3>Tips Jitu Menjawab Soal TKP:</h3>
+                    <h2>Mengapa Banyak Peserta Gagal di TKP?</h2>
+                    <p>Dalam Seleksi Kompetensi Dasar (SKD) CPNS, Tes Karakteristik Pribadi (TKP) seringkali menjadi batu sandungan yang menyebabkan banyak peserta gagal memenuhi <em>Passing Grade</em> (Ambang Batas). Mengapa demikian?</p>
+                    <p>Berbeda dengan TWK dan TIU yang memiliki jawaban mutlak (Benar atau Salah), setiap opsi jawaban pada soal TKP memiliki bobot nilai dari 1 hingga 5. Banyak peserta terjebak memilih jawaban yang terlihat "paling baik", namun sebenarnya tidak sesuai dengan indikator penilaian PNS.</p>
+
+                    <h3>Mindset yang Harus Ditanamkan Saat Menjawab TKP</h3>
+                    <p>Untuk mendapatkan skor poin 5 pada setiap soal, Anda harus memposisikan diri sebagai seorang pelayan publik yang profesional. Berikut adalah beberapa prinsip utamanya:</p>
                     <ul>
-                        <li><strong>Posisikan Diri Sebagai Pelayan Publik:</strong> Ingatlah bahwa PNS adalah pelayan masyarakat. Pilihlah jawaban yang paling berorientasi pada kepuasan publik, bukan kepentingan pribadi.</li>
-                        <li><strong>Hindari Jawaban Ekstrem:</strong> Terkadang jawaban yang terlalu "sempurna" atau mengorbankan segalanya demi pekerjaan bukanlah jawaban bernilai 5. Cari opsi yang seimbang, profesional, dan realistis.</li>
-                        <li><strong>Perhatikan Indikator Soal:</strong> Setiap soal TKP memiliki indikator spesifik (misal: Jejaring Kerja, Profesionalisme, TIK). Jika soal membahas tentang teknologi, pilihlah jawaban yang memanfaatkan teknologi untuk menyelesaikan masalah.</li>
+                        <li><strong>Orientasi pada Pelayanan Publik:</strong> Pilih jawaban yang paling memprioritaskan kepuasan dan kemudahan masyarakat, bukan kepentingan pribadi atau kenyamanan diri sendiri.</li>
+                        <li><strong>Integritas Tinggi:</strong> Jangan kompromi terhadap korupsi, kolusi, dan nepotisme. Jika ada soal tentang pelanggaran aturan, pilih tindakan yang tegas melaporkan atau menolak.</li>
+                        <li><strong>Adaptif terhadap Teknologi:</strong> Jika dihadapkan pada masalah efisiensi kerja, pilihlah opsi yang memanfaatkan sistem informasi atau inovasi digital.</li>
+                        <li><strong>Jejaring Kerja:</strong> Pilih jawaban yang menunjukkan Anda bisa berkolaborasi dengan baik dalam tim, bukan sekadar memaksakan ego atau bekerja sendirian secara tertutup.</li>
                     </ul>
-                    <p>Cara terbaik mengasah insting TKP adalah dengan memperbanyak latihan soal. Anda bisa mengakses ribuan soal TKP ter-update di platform Tryout Amania sekarang juga!</p>
+
+                    <h3>Hindari Jawaban "Sok Pahlawan"</h3>
+                    <p>Terkadang, pembuat soal akan memberikan opsi jawaban yang sangat idealis hingga mengorbankan prosedur operasional standar (SOP). Ingat, PNS bekerja berdasarkan aturan. Jangan memilih jawaban yang menabrak SOP meskipun niatnya baik. Carilah jalan tengah yang tetap humanis namun sesuai prosedur.</p>
+                    <p>Untuk mengasah kepekaan Anda dalam mencari jawaban bernilai 5, perbanyaklah melakukan simulasi melalui fitur <strong>Tryout SKD Amania</strong> yang dilengkapi dengan pembahasan dan pembobotan skor standar BKN.</p>
                 ',
             ],
             [
-                'title' => 'Pentingnya Sertifikasi Profesional di Era Digital, Apakah Gelar Sarjana Saja Cukup?',
-                'article_category_id' => $categoryMap['Pengembangan Karir'],
+                'title' => 'Mengapa Tryout Sistem CAT Sangat Penting Sebelum Hari H Ujian?',
+                'article_category_id' => $categoryMap['Motivasi Belajar'],
                 'image' => 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?q=80&w=800&auto=format&fit=crop',
                 'read_time' => 6,
                 'is_published' => true,
-                'tags' => ['Karir', 'Sertifikasi', 'Self Development', 'Dunia Kerja'],
+                'tags' => ['Simulasi CAT', 'Tryout CPNS', 'Manajemen Waktu', 'Mental Ujian'],
                 'content' => '
-                    <h2>Gelar Sarjana Saja Tidak Cukup</h2>
-                    <p>Di era persaingan kerja yang semakin ketat, memiliki ijazah S1 tidak lagi menjadi satu-satunya jaminan untuk diterima di perusahaan impian. HRD dan Recruiter masa kini lebih mencari kandidat yang memiliki keterampilan praktis yang dapat dibuktikan.</p>
-                    <p>Di sinilah <strong>Sertifikasi Profesional</strong> mengambil peran penting. Sertifikasi adalah bukti valid yang dikeluarkan oleh lembaga otoritatif bahwa Anda memiliki kompetensi khusus di bidang tertentu.</p>
-                    <h3>Manfaat Memiliki Sertifikasi:</h3>
-                    <ul>
-                        <li><strong>Validasi Skill:</strong> Sertifikasi dari Google, Cisco, atau Microsoft jauh lebih dilirik daripada sekadar mencantumkan "Menguasai Jaringan" di CV.</li>
-                        <li><strong>Meningkatkan Gaji:</strong> Karyawan bersertifikasi umumnya memiliki daya tawar yang lebih tinggi saat negosiasi gaji.</li>
-                        <li><strong>Update Pengetahuan:</strong> Silabus sertifikasi profesional selalu disesuaikan dengan tren industri terbaru, berbeda dengan kurikulum kampus yang kadang tertinggal.</li>
-                    </ul>
-                    <p>Mulailah merencanakan karir Anda. Ikuti berbagai Webinar dan Kelas Intensif di Amania untuk mempersiapkan diri menghadapi ujian sertifikasi global!</p>
+                    <h2>Bukan Sekadar Mengukur Kemampuan Otak</h2>
+                    <p>Banyak peserta CPNS maupun Sekolah Kedinasan yang gagal bukan karena mereka tidak pintar, melainkan karena mereka <strong>panik dan kehabisan waktu</strong>. Membaca buku tebal dan menghafal rumus saja tidak cukup jika Anda tidak terbiasa dengan tekanan waktu di depan layar komputer.</p>
+                    <p>Inilah mengapa mengikuti simulasi menggunakan <em>Computer Assisted Test</em> (CAT) yang otentik sangatlah krusial.</p>
+
+                    <h3>Manfaat Utama Rutin Mengerjakan Tryout CAT:</h3>
+                    
+                    <h4>1. Melatih Manajemen Waktu (Time Management)</h4>
+                    <p>Dalam ujian SKD asli, Anda diberi waktu 100 menit untuk menyelesaikan 110 soal. Artinya, Anda hanya memiliki waktu sekitar 54 detik per soal! Jika Anda terpaku pada satu soal hitungan TIU selama 3 menit, Anda sudah mengorbankan waktu untuk 3 soal lain yang mungkin lebih mudah. Tryout CAT melatih Anda kapan harus *skip* soal dan kapan harus mengeksekusi.</p>
+
+                    <h4>2. Adaptasi dengan User Interface (UI) BKN</h4>
+                    <p>Rasa gugup di hari H sering muncul karena peserta bingung dengan tombol-tombol di layar ujian. Dengan rutin menggunakan platform tryout yang menduplikasi tampilan ujian BKN (seperti Amania Evaluation), Anda tidak akan canggung lagi saat mengklik tombol simpan, ragu-ragu, atau berpindah antar nomor soal.</p>
+
+                    <h4>3. Membangun Stamina Mental</h4>
+                    <p>Duduk menatap layar sambil berpikir keras selama 100 menit itu melelahkan. Banyak peserta yang fokusnya menurun drastis di 30 menit terakhir (terutama saat mengerjakan TKP yang teksnya panjang-panjang). Simulasi yang rutin akan membangun daya tahan fokus Anda agar tetap prima dari menit pertama hingga detik terakhir.</p>
+
+                    <p>Jadikan tryout sebagai sarana evaluasi mingguan Anda. Kerjakan, lihat hasil skoringnya, lalu analisis di bagian mana Anda lemah. Segera perbaiki di tryout selanjutnya bersama Amania!</p>
                 ',
             ],
         ];
 
-        // 4. Masukkan ke Database
+        // 4. Proses Insert ke Database
         foreach ($articles as $articleData) {
             $articleData['slug'] = Str::slug($articleData['title']);
             $articleData['user_id'] = $author->id;
             
-            Article::firstOrCreate(
-                ['slug' => $articleData['slug']], // Cek agar tidak duplikat
+            // Gunakan updateOrCreate agar kalau file ini di-run berulang kali, 
+            // dia akan memperbarui isinya, bukan membuat duplikat baru.
+            Article::updateOrCreate(
+                ['slug' => $articleData['slug']], 
                 $articleData
             );
         }
 
-        $this->command->info('Seeder Artikel (Real Content) berhasil dijalankan!');
+        $this->command->info('Seeder 3 Artikel Realistis berhasil dijalankan!');
     }
 }
