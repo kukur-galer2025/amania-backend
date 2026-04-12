@@ -138,4 +138,24 @@ class SkdCheckoutController extends Controller
             return response()->json(['success' => false, 'message' => 'Kesalahan sistem saat memproses transaksi.'], 500);
         }
     }
+
+    // =========================================================================
+    // 3. MENGAMBIL RIWAYAT TRANSAKSI USER (UNTUK DASHBOARD BELAJARKU)
+    // =========================================================================
+    public function myTransactions(Request $request)
+    {
+        $user = $request->user();
+
+        // Ambil semua transaksi milik user ini beserta relasi tryout dan kategori tryout-nya
+        $transactions = SkdTransaction::with(['skd_tryout.category'])
+            ->where('user_id', $user->id)
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Berhasil mengambil data transaksi.',
+            'data'    => $transactions
+        ]);
+    }
 }

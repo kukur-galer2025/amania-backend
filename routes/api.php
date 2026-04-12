@@ -94,7 +94,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/notifications', [NotificationController::class, 'index']);
     Route::post('/notifications/read', [NotificationController::class, 'markAllAsRead']);
     
-    // Checkout E-Product dengan Tripay (frontend harus mengirim 'method' bank/qris)
+    // Checkout E-Product dengan Tripay
     Route::post('/checkout/e-product', [CheckoutController::class, 'purchaseEProduct']);
     Route::post('/e-products/{id}/reviews', [EProductController::class, 'submitReview']);
 
@@ -102,6 +102,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::prefix('tryout/skd')->group(function () {
         Route::get('/payment-channels', [SkdCheckoutController::class, 'getPaymentChannels']);
         Route::post('/checkout', [SkdCheckoutController::class, 'createTransaction']);
+        
+        // 🔥 TAMBAHAN BARU: Untuk halaman Dashboard Belajarku
+        Route::get('/transactions', [SkdCheckoutController::class, 'myTransactions']);
     });
 });
 
