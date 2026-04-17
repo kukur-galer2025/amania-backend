@@ -10,18 +10,23 @@ return new class extends Migration
     {
         Schema::create('e_product_purchases', function (Blueprint $table) {
             $table->id();
-            $table->string('invoice_code')->unique(); // Cth: INV-EP-12345
+            
+            // 🔥 KOLOM REFERENSI TRIPAY 🔥
+            $table->string('reference')->unique(); // Kode Referensi dari sistem kita (Merchant Ref)
+            $table->string('tripay_reference')->nullable()->unique(); // Kode Referensi asli dari Tripay
+            
             $table->foreignId('user_id')->constrained('users')->onDelete('cascade'); // Pembeli
             $table->foreignId('e_product_id')->constrained('e_products')->onDelete('cascade'); // Produk
             
             $table->integer('amount'); // Harga total saat dibeli
             
-            // 🔥 KOLOM KHUSUS PAYMENT GATEWAY (MIDTRANS) 🔥
-            $table->string('snap_token')->nullable(); // Token untuk memunculkan popup pembayaran
-            $table->string('payment_url')->nullable(); // Link bayar alternatif jika popup gagal
+            // Link redirect ke halaman pembayaran Tripay
+            $table->string('checkout_url')->nullable(); 
             
-            // Status standar Midtrans
-            $table->enum('status', ['pending', 'success', 'failed', 'expired'])->default('pending');
+            // Status standar Tripay
+            // UNPAID, PAID, EXPIRED, FAILED, REFUND
+            $table->string('status')->default('UNPAID'); 
+            
             $table->timestamps();
         });
     }

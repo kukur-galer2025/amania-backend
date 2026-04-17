@@ -3,196 +3,199 @@
 namespace Database\Seeders;
 
 use Illuminate\Database\Seeder;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
+use App\Models\SkdTryoutCategory;
+use App\Models\SkdQuestionSubCategory;
+use App\Models\SkdTryout;
+use App\Models\SkdQuestion;
+use Faker\Factory as Faker;
 
 class SkdTryoutSeeder extends Seeder
 {
     public function run(): void
     {
-        $this->command->info('Memulai generate 110 Soal Tryout SKD Asli...');
+        $faker = Faker::create('id_ID');
 
-        // 1. Buat Sub-Kategori (Update nama kategori agar lebih real)
-        $twkSubId = DB::table('skd_tryout_categories')->where('slug', 'cpns')->value('id'); 
-        // Note: Kita anggap foreign key ke skd_tryout_category_id dari migrasi baru. 
-        // Jika belum ada, kita insert dulu kategori utamanya:
-        $categoryId = DB::table('skd_tryout_categories')->insertGetId([
-            'name' => 'SKD CPNS', 'slug' => 'skd-cpns', 'created_at' => now(), 'updated_at' => now()
-        ]);
+        // 1. KATEGORI TRYOUT UTAMA
+        $category = SkdTryoutCategory::firstOrCreate(
+            ['slug' => 'cpns-2026'],
+            ['name' => 'CPNS 2026']
+        );
 
-        $twkSubId = DB::table('skd_question_sub_categories')->insertGetId([
-            'main_category' => 'twk', 'name' => 'Pilar Negara', 'created_at' => now(), 'updated_at' => now()
-        ]);
-        $tiuSubId = DB::table('skd_question_sub_categories')->insertGetId([
-            'main_category' => 'tiu', 'name' => 'Kemampuan Silogisme', 'created_at' => now(), 'updated_at' => now()
-        ]);
-        $tkpSubId = DB::table('skd_question_sub_categories')->insertGetId([
-            'main_category' => 'tkp', 'name' => 'Pelayanan Publik', 'created_at' => now(), 'updated_at' => now()
-        ]);
-
-        // 2. Buat Data Tryout
-        $tryoutId = DB::table('skd_tryouts')->insertGetId([
-            'skd_tryout_category_id' => $categoryId,
-            'title' => 'Tryout Akbar SKD CPNS 2026 (Real Soal)',
-            'slug' => 'tryout-akbar-skd-cpns-2026-' . time(),
-            'duration_minutes' => 100,
-            'price' => 50000,
-            'discount_price' => 25000,
-            'is_hots' => true,
-            'is_active' => true,
-            'description' => '<p>Ini adalah paket Tryout SKD yang menggunakan soal asli berstandar BKN. Terdiri dari 30 soal TWK, 35 soal TIU, dan 45 soal TKP.</p>',
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
-
-        $questions = [];
-
-        // ==========================================
-        // 🌟 BANK SOAL REAL TWK (Poin Mutlak 5 / 0)
-        // ==========================================
-        $twkPool = [
-            [
-                'q' => 'Semboyan Bhinneka Tunggal Ika yang menjadi semboyan nasional bangsa Indonesia diambil dari kitab karangan Mpu Tantular pada masa Kerajaan Majapahit. Kitab yang dimaksud adalah...',
-                'exp' => 'Semboyan Bhinneka Tunggal Ika diambil dari Kitab Sutasoma karangan Mpu Tantular (Kerajaan Majapahit).',
-                'opts' => [
-                    ['t' => 'Kitab Sutasoma', 's' => 5], // Jawaban Benar
-                    ['t' => 'Kitab Negarakertagama', 's' => 0],
-                    ['t' => 'Kitab Arjuna Wiwaha', 's' => 0],
-                    ['t' => 'Kitab Pararaton', 's' => 0],
-                    ['t' => 'Kitab Ramayana', 's' => 0],
-                ]
-            ],
-            [
-                'q' => 'Pancasila sebagai ideologi terbuka mengandung makna bahwa nilai-nilai dasar Pancasila dapat dikembangkan sesuai dengan dinamika kehidupan bangsa. Syarat utama sebuah ideologi terbuka adalah...',
-                'exp' => 'Ideologi terbuka harus bersumber dari nilai-nilai yang hidup dalam masyarakat itu sendiri, bukan dipaksakan dari luar.',
-                'opts' => [
-                    ['t' => 'Nilai-nilainya digali dari budaya dan kepribadian bangsa sendiri', 's' => 5],
-                    ['t' => 'Mampu menerima semua budaya asing tanpa penyaringan', 's' => 0],
-                    ['t' => 'Diciptakan oleh negara untuk mengatur rakyat secara mutlak', 's' => 0],
-                    ['t' => 'Isinya sangat operasional dan kaku agar mudah diterapkan', 's' => 0],
-                    ['t' => 'Dapat diubah nilai dasarnya setiap berganti presiden', 's' => 0],
-                ]
-            ],
+        // 2. SUB-KATEGORI MATERI (SESUAI KISI-KISI BKN)
+        // Kumpulan materi TWK
+        $twkMateri = [
+            SkdQuestionSubCategory::firstOrCreate(['main_category' => 'twk', 'name' => 'Nasionalisme']),
+            SkdQuestionSubCategory::firstOrCreate(['main_category' => 'twk', 'name' => 'Integritas']),
+            SkdQuestionSubCategory::firstOrCreate(['main_category' => 'twk', 'name' => 'Bela Negara']),
+            SkdQuestionSubCategory::firstOrCreate(['main_category' => 'twk', 'name' => 'Pilar Negara']),
         ];
 
+        // Kumpulan materi TIU
+        $tiuMateri = [
+            SkdQuestionSubCategory::firstOrCreate(['main_category' => 'tiu', 'name' => 'Silogisme']),
+            SkdQuestionSubCategory::firstOrCreate(['main_category' => 'tiu', 'name' => 'Analogi']),
+            SkdQuestionSubCategory::firstOrCreate(['main_category' => 'tiu', 'name' => 'Deret Angka']),
+            SkdQuestionSubCategory::firstOrCreate(['main_category' => 'tiu', 'name' => 'Figural']),
+        ];
+
+        // Kumpulan materi TKP
+        $tkpMateri = [
+            SkdQuestionSubCategory::firstOrCreate(['main_category' => 'tkp', 'name' => 'Pelayanan Publik']),
+            SkdQuestionSubCategory::firstOrCreate(['main_category' => 'tkp', 'name' => 'Jejaring Kerja']),
+            SkdQuestionSubCategory::firstOrCreate(['main_category' => 'tkp', 'name' => 'Sosial Budaya']),
+            SkdQuestionSubCategory::firstOrCreate(['main_category' => 'tkp', 'name' => 'Anti Radikalisme']),
+        ];
+
+        // 3. BUAT DATA TRYOUT UTAMA
+        $tryout = SkdTryout::create([
+            'skd_tryout_category_id' => $category->id,
+            'title'                  => 'Simulasi SKD CPNS 2026 Premium (CAT BKN 110 Soal)',
+            'slug'                   => Str::slug('Simulasi SKD CPNS 2026 Premium (CAT BKN 110 Soal)'),
+            'description'            => 'Tryout ini dirancang khusus menyerupai standar CAT BKN terbaru dengan komposisi baku 110 Soal (30 TWK, 35 TIU, 45 TKP) berstandar HOTS.',
+            'duration_minutes'       => 100,
+            'price'                  => 149000,
+            'discount_price'         => 49000,
+            'discount_start_date'    => now()->subDay(),
+            'discount_end_date'      => now()->addDays(7),
+            'is_hots'                => true,
+            'is_active'              => true,
+        ]);
+
+        // ========================================================
+        // BAGIAN 1: TWK (30 SOAL) -> Poin 5 (Benar) atau 0 (Salah)
+        // ========================================================
         for ($i = 1; $i <= 30; $i++) {
-            $tpl = $twkPool[$i % count($twkPool)];
-            $opts = $tpl['opts'];
-            shuffle($opts); // Acak urutan A B C D E
+            $subCat = $faker->randomElement($twkMateri); // Pilih materi acak
 
-            $questions[] = [
-                'skd_tryout_id' => $tryoutId, 'main_category' => 'twk', 'skd_question_sub_category_id' => $twkSubId,
-                'question_text' => '<p><strong>(TWK No. '.$i.')</strong> ' . $tpl['q'] . '</p>',
-                'option_a' => '<p>' . $opts[0]['t'] . '</p>', 'score_a' => $opts[0]['s'],
-                'option_b' => '<p>' . $opts[1]['t'] . '</p>', 'score_b' => $opts[1]['s'],
-                'option_c' => '<p>' . $opts[2]['t'] . '</p>', 'score_c' => $opts[2]['s'],
-                'option_d' => '<p>' . $opts[3]['t'] . '</p>', 'score_d' => $opts[3]['s'],
-                'option_e' => '<p>' . $opts[4]['t'] . '</p>', 'score_e' => $opts[4]['s'],
-                'explanation' => '<p><strong>Pembahasan:</strong><br/>' . $tpl['exp'] . '</p>',
-                'created_at' => now(), 'updated_at' => now(),
-            ];
+            if ($i === 1) {
+                $text = 'Pancasila sebagai ideologi terbuka memiliki dimensi realitas, idealitas, dan fleksibilitas. Di era globalisasi, banyak generasi muda yang lebih mengagumi budaya asing. Tindakan yang paling tepat untuk mengimplementasikan dimensi fleksibilitas Pancasila tanpa menghilangkan jati diri bangsa adalah...';
+                $explanation = 'Materi: Pilar Negara. Dimensi fleksibilitas berarti Pancasila mampu menyesuaikan diri dengan perkembangan zaman. Memanfaatkan teknologi luar untuk mempromosikan budaya lokal adalah bentuk adaptasi yang tepat.';
+                $ops = [
+                    'a' => ['text' => 'Menolak segala bentuk budaya asing yang masuk ke Indonesia.', 'score' => 0],
+                    'b' => ['text' => 'Mempelajari budaya asing secara mendalam untuk diakulturasi secara paksa.', 'score' => 0],
+                    'c' => ['text' => 'Memanfaatkan teknologi digital saat ini sebagai media untuk mempromosikan kebudayaan lokal ke kancah internasional.', 'score' => 5], // Kunci Jawaban
+                    'd' => ['text' => 'Mewajibkan seluruh generasi muda untuk menggunakan pakaian adat.', 'score' => 0],
+                    'e' => ['text' => 'Membiarkan budaya asing berkembang asalkan mendatangkan devisa.', 'score' => 0],
+                ];
+            } else {
+                $text = "(Soal TWK - {$subCat->name}) " . $faker->paragraph(2) . " Berdasarkan narasi historis tersebut, manakah sikap yang paling mencerminkan nilai integritas nasional?";
+                $explanation = "Pembahasan TWK: " . $faker->sentence(10);
+                
+                $scores = [5, 0, 0, 0, 0];
+                shuffle($scores);
+                $ops = [
+                    'a' => ['text' => $faker->sentence(6), 'score' => $scores[0]],
+                    'b' => ['text' => $faker->sentence(5), 'score' => $scores[1]],
+                    'c' => ['text' => $faker->sentence(7), 'score' => $scores[2]],
+                    'd' => ['text' => $faker->sentence(6), 'score' => $scores[3]],
+                    'e' => ['text' => $faker->sentence(8), 'score' => $scores[4]],
+                ];
+            }
+
+            SkdQuestion::create([
+                'skd_tryout_id'                => $tryout->id,
+                'skd_question_sub_category_id' => $subCat->id,
+                'main_category'                => 'twk',
+                'question_text'                => $text,
+                'option_a'                     => $ops['a']['text'], 'score_a' => $ops['a']['score'],
+                'option_b'                     => $ops['b']['text'], 'score_b' => $ops['b']['score'],
+                'option_c'                     => $ops['c']['text'], 'score_c' => $ops['c']['score'],
+                'option_d'                     => $ops['d']['text'], 'score_d' => $ops['d']['score'],
+                'option_e'                     => $ops['e']['text'], 'score_e' => $ops['e']['score'],
+                'explanation'                  => $explanation,
+            ]);
         }
-        $this->command->info('Berhasil mengacak dan membuat 30 soal TWK.');
 
-        // ==========================================
-        // 🌟 BANK SOAL REAL TIU (Poin Mutlak 5 / 0)
-        // ==========================================
-        $tiuPool = [
-            [
-                'q' => 'Semua pegawai berseragam rapi. Sebagian pegawai menggunakan dasi. Kesimpulan yang paling tepat adalah...',
-                'exp' => 'Jika Semua A adalah B, dan Sebagian A adalah C. Maka kesimpulannya adalah Sebagian A yang menjadi B juga merupakan C (Sebagian pegawai berseragam rapi dan menggunakan dasi).',
-                'opts' => [
-                    ['t' => 'Sebagian pegawai berseragam rapi dan menggunakan dasi', 's' => 5],
-                    ['t' => 'Semua pegawai berseragam rapi dan menggunakan dasi', 's' => 0],
-                    ['t' => 'Sebagian pegawai tidak berseragam rapi', 's' => 0],
-                    ['t' => 'Pegawai yang menggunakan dasi pasti tidak berseragam rapi', 's' => 0],
-                    ['t' => 'Tidak ada kesimpulan yang benar', 's' => 0],
-                ]
-            ],
-            [
-                'q' => 'Lanjutkan deret angka berikut: 3, 6, 12, 24, 48, ...',
-                'exp' => 'Pola deret tersebut adalah dikali 2 (x2). Maka angka selanjutnya adalah 48 x 2 = 96.',
-                'opts' => [
-                    ['t' => '96', 's' => 5],
-                    ['t' => '72', 's' => 0],
-                    ['t' => '84', 's' => 0],
-                    ['t' => '100', 's' => 0],
-                    ['t' => '108', 's' => 0],
-                ]
-            ],
-        ];
-
+        // ========================================================
+        // BAGIAN 2: TIU (35 SOAL) -> Poin 5 (Benar) atau 0 (Salah)
+        // ========================================================
         for ($i = 1; $i <= 35; $i++) {
-            $tpl = $tiuPool[$i % count($tiuPool)];
-            $opts = $tpl['opts'];
-            shuffle($opts);
+            $subCat = $faker->randomElement($tiuMateri);
 
-            $questions[] = [
-                'skd_tryout_id' => $tryoutId, 'main_category' => 'tiu', 'skd_question_sub_category_id' => $tiuSubId,
-                'question_text' => '<p><strong>(TIU No. '.$i.')</strong> ' . $tpl['q'] . '</p>',
-                'option_a' => '<p>' . $opts[0]['t'] . '</p>', 'score_a' => $opts[0]['s'],
-                'option_b' => '<p>' . $opts[1]['t'] . '</p>', 'score_b' => $opts[1]['s'],
-                'option_c' => '<p>' . $opts[2]['t'] . '</p>', 'score_c' => $opts[2]['s'],
-                'option_d' => '<p>' . $opts[3]['t'] . '</p>', 'score_d' => $opts[3]['s'],
-                'option_e' => '<p>' . $opts[4]['t'] . '</p>', 'score_e' => $opts[4]['s'],
-                'explanation' => '<p><strong>Pembahasan:</strong><br/>' . $tpl['exp'] . '</p>',
-                'created_at' => now(), 'updated_at' => now(),
-            ];
-        }
-        $this->command->info('Berhasil mengacak dan membuat 35 soal TIU.');
+            if ($i === 1) { 
+                $text = "Semua ASN wajib menjunjung tinggi netralitas pada saat pemilihan umum.\nSebagian anggota keluarga Pak Budi adalah ASN.\n\nKesimpulan yang paling tepat dari dua premis di atas adalah...";
+                $explanation = 'Materi: Silogisme. Rumus: Premis 1 (A=B), Premis 2 (C=A). Kesimpulan (C=B): Sebagian keluarga Pak Budi = Wajib Netral.';
+                $ops = [
+                    'a' => ['text' => 'Semua anggota keluarga Pak Budi wajib menjunjung tinggi netralitas.', 'score' => 0],
+                    'b' => ['text' => 'Sebagian anggota keluarga Pak Budi tidak wajib netral.', 'score' => 0],
+                    'c' => ['text' => 'Sebagian anggota keluarga Pak Budi wajib menjunjung tinggi netralitas pada saat pemilihan umum.', 'score' => 5], // Kunci
+                    'd' => ['text' => 'Pak Budi wajib menjunjung tinggi netralitas.', 'score' => 0],
+                    'e' => ['text' => 'Semua ASN adalah anggota keluarga Pak Budi.', 'score' => 0],
+                ];
+            } else {
+                $text = "(Soal TIU - {$subCat->name}) Jika X = " . rand(10, 50) . " dan Y = " . rand(10, 50) . ", maka pernyataan yang tepat adalah " . $faker->sentence(4);
+                $explanation = "Pembahasan TIU: Karena nilai X dan Y sudah diketahui, maka perhitungannya adalah...";
+                
+                $scores = [5, 0, 0, 0, 0];
+                shuffle($scores);
+                $ops = [
+                    'a' => ['text' => 'X > Y', 'score' => $scores[0]],
+                    'b' => ['text' => 'X < Y', 'score' => $scores[1]],
+                    'c' => ['text' => 'X = Y', 'score' => $scores[2]],
+                    'd' => ['text' => 'Hubungan X dan Y tidak dapat ditentukan.', 'score' => $scores[3]],
+                    'e' => ['text' => 'X + Y = 100', 'score' => $scores[4]],
+                ];
+            }
 
-        // ==========================================
-        // 🌟 BANK SOAL REAL TKP (Poin Variatif 1 - 5)
-        // ==========================================
-        $tkpPool = [
-            [
-                'q' => 'Saat Anda sedang bertugas di loket pelayanan, ada seorang bapak tua yang marah-marah karena merasa antreannya diserobot oleh orang lain. Sikap Anda sebagai pelayan publik adalah...',
-                'exp' => 'Indikator: Pelayanan Publik. Menenangkan dan memberikan penjelasan yang solutif adalah sikap terbaik (Poin 5).',
-                'opts' => [
-                    ['t' => 'Menghampiri bapak tersebut, meminta maaf atas ketidaknyamanan, lalu mengecek nomor antrean sebenarnya untuk diselesaikan', 's' => 5],
-                    ['t' => 'Meminta satpam untuk menenangkan bapak tersebut karena mengganggu antrean lain', 's' => 4],
-                    ['t' => 'Tetap fokus melayani pelanggan di depan saya agar antrean cepat selesai', 's' => 3],
-                    ['t' => 'Menasihati bapak tersebut agar bersabar dan tidak perlu marah-marah di tempat umum', 's' => 2],
-                    ['t' => 'Memarahi orang yang menyerobot antrean agar bapak tersebut merasa dibela', 's' => 1],
-                ]
-            ],
-            [
-                'q' => 'Anda ditugaskan dalam sebuah tim kerja dengan anggota yang memiliki latar belakang budaya dan sifat yang sangat berbeda-beda. Suatu hari, terjadi selisih paham yang membuat tim menjadi canggung. Langkah Anda...',
-                'exp' => 'Indikator: Jejaring Kerja / Kerjasama. Mengambil inisiatif mencari jalan tengah menunjukkan sifat kepemimpinan dan kolaborasi yang tinggi.',
-                'opts' => [
-                    ['t' => 'Mengajak tim duduk bersama, mendengarkan masalah dengan kepala dingin, dan mencari win-win solution', 's' => 5],
-                    ['t' => 'Meminta ketua tim untuk turun tangan menengahi konflik tersebut', 's' => 4],
-                    ['t' => 'Memposisikan diri netral dan tidak memihak siapapun agar tidak ikut terseret konflik', 's' => 3],
-                    ['t' => 'Tetap bekerja seperti biasa, karena konflik personal tidak boleh mengganggu pekerjaan', 's' => 2],
-                    ['t' => 'Mengeluhkan kondisi tim kepada atasan dan meminta dipindah ke tim lain', 's' => 1],
-                ]
-            ],
-        ];
-
-    for ($i = 1; $i <= 45; $i++) {
-            $tpl = $tkpPool[$i % count($tkpPool)];
-            $opts = $tpl['opts'];
-            shuffle($opts);
-
-            $questions[] = [
-                'skd_tryout_id' => $tryoutId, 'main_category' => 'tkp', 'skd_question_sub_category_id' => $tkpSubId,
-                'question_text' => '<p><strong>(TKP No. '.$i.')</strong> ' . $tpl['q'] . '</p>',
-                'option_a' => '<p>' . $opts[0]['t'] . '</p>', 'score_a' => $opts[0]['s'],
-                'option_b' => '<p>' . $opts[1]['t'] . '</p>', 'score_b' => $opts[1]['s'],
-                'option_c' => '<p>' . $opts[2]['t'] . '</p>', 'score_c' => $opts[2]['s'],
-                'option_d' => '<p>' . $opts[3]['t'] . '</p>', 'score_d' => $opts[3]['s'],
-                'option_e' => '<p>' . $opts[4]['t'] . '</p>', 'score_e' => $opts[4]['s'],
-                'explanation' => '<p><strong>Pembahasan:</strong><br/>' . $tpl['exp'] . '</p>',
-                'created_at' => now(), 'updated_at' => now(),
-            ];
-        }
-        $this->command->info('Berhasil mengacak dan membuat 45 soal TKP.');
-
-        // 3. Masukkan ke Database dengan sistem Chunking (Aman dari Out of Memory)
-        $chunks = array_chunk($questions, 50);
-        foreach ($chunks as $chunk) {
-            DB::table('skd_questions')->insert($chunk);
+            SkdQuestion::create([
+                'skd_tryout_id'                => $tryout->id,
+                'skd_question_sub_category_id' => $subCat->id,
+                'main_category'                => 'tiu',
+                'question_text'                => $text,
+                'option_a'                     => $ops['a']['text'], 'score_a' => $ops['a']['score'],
+                'option_b'                     => $ops['b']['text'], 'score_b' => $ops['b']['score'],
+                'option_c'                     => $ops['c']['text'], 'score_c' => $ops['c']['score'],
+                'option_d'                     => $ops['d']['text'], 'score_d' => $ops['d']['score'],
+                'option_e'                     => $ops['e']['text'], 'score_e' => $ops['e']['score'],
+                'explanation'                  => $explanation,
+            ]);
         }
 
-        $this->command->info('Selesai! Tryout dengan 110 Soal Asli beserta Kunci Jawaban Acak siap digunakan! 🚀');
+        // ========================================================
+        // BAGIAN 3: TKP (45 SOAL) -> Poin 1 sampai 5 (Tidak ada salah)
+        // ========================================================
+        for ($i = 1; $i <= 45; $i++) {
+            $subCat = $faker->randomElement($tkpMateri);
+
+            if ($i === 1) { 
+                $text = 'Anda ditugaskan di bagian loket pelayanan masyarakat. Saat jam pelayanan hampir tutup dan Anda sedang merekap laporan, datang seorang lansia kebingungan membawa berkas yang salah. Sikap Anda...';
+                $explanation = 'Materi: Pelayanan Publik. Poin 5 diberikan pada tindakan yang melayani dengan tulus, solutif, dan proaktif tanpa mengabaikan tugas lain terlalu lama.';
+                $ops = [
+                    'a' => ['text' => 'Menyuruh lansia tersebut pulang dan kembali besok pagi.', 'score' => 1],
+                    'b' => ['text' => 'Menjelaskan kesalahannya, lalu memintanya segera melengkapi.', 'score' => 3],
+                    'c' => ['text' => 'Menunda rekap laporan sejenak, melayani dengan ramah, dan membantunya mengurus persyaratan hari itu juga.', 'score' => 5], // Poin 5
+                    'd' => ['text' => 'Meminta rekan kerja lain untuk melayani lansia tersebut.', 'score' => 4],
+                    'e' => ['text' => 'Menerima berkasnya apa adanya untuk menyenangkan hatinya.', 'score' => 2],
+                ];
+            } else {
+                $text = "(Soal TKP - {$subCat->name}) " . $faker->paragraph(2) . " Sebagai pegawai baru di instansi tersebut, sikap Anda adalah...";
+                $explanation = "Pembahasan TKP: Pada aspek ini, penilaian tertinggi ditekankan pada kolaborasi dan inisiatif positif.";
+                
+                // TKP Poin 1 sampai 5 diacak
+                $scores = [1, 2, 3, 4, 5];
+                shuffle($scores);
+                $ops = [
+                    'a' => ['text' => $faker->sentence(6), 'score' => $scores[0]],
+                    'b' => ['text' => $faker->sentence(5), 'score' => $scores[1]],
+                    'c' => ['text' => $faker->sentence(7), 'score' => $scores[2]],
+                    'd' => ['text' => $faker->sentence(6), 'score' => $scores[3]],
+                    'e' => ['text' => $faker->sentence(8), 'score' => $scores[4]],
+                ];
+            }
+
+            SkdQuestion::create([
+                'skd_tryout_id'                => $tryout->id,
+                'skd_question_sub_category_id' => $subCat->id,
+                'main_category'                => 'tkp',
+                'question_text'                => $text,
+                'option_a'                     => $ops['a']['text'], 'score_a' => $ops['a']['score'],
+                'option_b'                     => $ops['b']['text'], 'score_b' => $ops['b']['score'],
+                'option_c'                     => $ops['c']['text'], 'score_c' => $ops['c']['score'],
+                'option_d'                     => $ops['d']['text'], 'score_d' => $ops['d']['score'],
+                'option_e'                     => $ops['e']['text'], 'score_e' => $ops['e']['score'],
+                'explanation'                  => $explanation,
+            ]);
+        }
     }
 }

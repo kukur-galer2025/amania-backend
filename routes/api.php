@@ -13,13 +13,15 @@ use App\Http\Controllers\Api\LeaderboardController;
 use App\Http\Controllers\Api\NotificationController; 
 use App\Http\Controllers\Api\GlobalSearchController; 
 use App\Http\Controllers\Api\EProductController;
-use App\Http\Controllers\Api\CheckoutController;
 
-// 🔥 IMPORT CONTROLLER PUBLIK & CHECKOUT TRYOUT SKD 🔥
+// --- 2. Import Checkout & Public Tryout Controllers ---
+use App\Http\Controllers\Api\EProductCheckoutController;
 use App\Http\Controllers\Api\Tryout\Skd\PublicSkdTryoutController;
 use App\Http\Controllers\Api\Tryout\Skd\SkdCheckoutController;
+// 🔥 IMPORT CONTROLLER UJIAN YANG BARU KITA BUAT 🔥
+use App\Http\Controllers\Api\Tryout\Skd\SkdExamController;
 
-// --- 2. Import Admin Controllers ---
+// --- 3. Import Admin Controllers ---
 use App\Http\Controllers\Api\Admin\EventController as AdminEvent;
 use App\Http\Controllers\Api\Admin\RegistrationController as AdminReg;
 use App\Http\Controllers\Api\Admin\ArticleCategoryController as AdminCategory;
@@ -36,7 +38,7 @@ use App\Http\Controllers\Api\Admin\NotificationController as AdminNotification;
 use App\Http\Controllers\Api\Admin\EProductController as AdminEProduct;
 use App\Http\Controllers\Api\Admin\ImageUploadController;
 
-// 🔥 3. IMPORT ADMIN TRYOUT CONTROLLERS 🔥
+// --- 4. Import Admin Tryout Controllers ---
 use App\Http\Controllers\Api\Admin\Tryout\Skd\SkdTryoutController;
 use App\Http\Controllers\Api\Admin\Tryout\Skd\SkdQuestionController;
 use App\Http\Controllers\Api\Admin\Tryout\Skd\SkdQuestionSubCategoryController;
@@ -68,7 +70,7 @@ Route::get('/e-products', [EProductController::class, 'index']);
 Route::get('/e-products/{slug}', [EProductController::class, 'show']);
 
 // 🔥 WEBHOOK / CALLBACK TRIPAY (WAJIB PUBLIC) 🔥
-Route::post('/tripay/callback', [CheckoutController::class, 'tripayWebhook']);
+Route::post('/tripay/callback', [EProductCheckoutController::class, 'tripayWebhook']);
 
 // 🔥 RUTE PUBLIK TRYOUT SKD 🔥
 Route::prefix('tryout/skd')->group(function () {
@@ -95,16 +97,18 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/notifications/read', [NotificationController::class, 'markAllAsRead']);
     
     // Checkout E-Product dengan Tripay
-    Route::post('/checkout/e-product', [CheckoutController::class, 'purchaseEProduct']);
+    Route::post('/checkout/e-product', [EProductCheckoutController::class, 'purchaseEProduct']);
     Route::post('/e-products/{id}/reviews', [EProductController::class, 'submitReview']);
 
-    // 🔥 RUTE CHECKOUT TRYOUT SKD (TRIPAY) 🔥
+    // 🔥 RUTE CHECKOUT & UJIAN TRYOUT SKD 🔥
     Route::prefix('tryout/skd')->group(function () {
+        // Transaksi & Checkout
         Route::get('/payment-channels', [SkdCheckoutController::class, 'getPaymentChannels']);
         Route::post('/checkout', [SkdCheckoutController::class, 'createTransaction']);
-        
-        // 🔥 TAMBAHAN BARU: Untuk halaman Dashboard Belajarku
         Route::get('/transactions', [SkdCheckoutController::class, 'myTransactions']);
+
+        // 🔥 ENDPOINT PLAY UJIAN (BARU) 🔥
+        Route::get('/play/{slug}', [SkdExamController::class, 'getQuestions']);
     });
 });
 
@@ -204,4 +208,4 @@ Route::middleware(['auth:sanctum', 'role:superadmin'])
     Route::post('/e-products', [AdminEProduct::class, 'store']);
     Route::post('/e-products/{id}', [AdminEProduct::class, 'update']); 
     Route::delete('/e-products/{id}', [AdminEProduct::class, 'destroy']);
-});
+}); 

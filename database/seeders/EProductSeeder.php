@@ -2,73 +2,96 @@
 
 namespace Database\Seeders;
 
+use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
-use App\Models\EProduct;
 use App\Models\User;
+use App\Models\EProduct;
+use App\Models\EProductPurchase;
+use App\Models\EProductReview;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Hash;
 
 class EProductSeeder extends Seeder
 {
-    /**
-     * Run the database seeds.
-     */
     public function run(): void
     {
-        // 1. Cari user Superadmin untuk dijadikan sebagai penulis/pembuat E-Produk
-        // Sesuaikan dengan data yang ada di database kamu, atau buat baru kalau kosong.
-        $admin = User::where('role', 'superadmin')->first();
-
-        if (!$admin) {
-            $admin = User::create([
-                'name' => 'Super Administrator',
-                'email' => 'admin@amania.id',
-                'password' => bcrypt('password123'),
+        // 1. Buat Dummy Author (Superadmin)
+        $admin = User::firstOrCreate(
+            ['email' => 'adminku@amania.id'],
+            [
+                'name' => 'Admin Amania',
+                'password' => Hash::make('password123'),
                 'role' => 'superadmin'
-            ]);
-        }
+            ]
+        );
 
-        // 2. Siapkan data dummy E-Produk
+        // 2. Buat Dummy Buyer (User)
+        $member = User::firstOrCreate(
+            ['email' => 'member@amania.id'],
+            [
+                'name' => 'Member Setia',
+                'password' => Hash::make('password123'),
+                'role' => 'user' 
+            ]
+        );
+
+        // 3. Buat Data E-Products
         $products = [
             [
-                'title' => 'Masterclass Fullstack Web Development (Next.js & Laravel)',
-                'description' => '<h3>Modul Komprehensif Siap Kerja!</h3><p>Pelajari cara membangun platform berskala Enterprise seperti Amania dari nol hingga deploy. Dilengkapi dengan <strong>source code eksklusif</strong> dan grup diskusi privat.</p><ul><li>Membangun API Cepat dengan Laravel 11</li><li>Frontend interaktif dengan Next.js App Router</li><li>Integrasi Midtrans Payment Gateway</li></ul>',
-                'price' => 150000,
-                'cover_image' => null, // Dibiarkan null agar Frontend menggunakan icon default
-                'file_path' => 'e_products/files/dummy-module.pdf', // File bohongan
+                'user_id'      => $admin->id,
+                'title'        => 'Masterclass Fullstack Web Development (Next.js 15 & Laravel 11)',
+                'slug'         => Str::slug('Masterclass Fullstack Web Development Next.js Laravel'),
+                'description'  => '<p>Pelajari cara membangun aplikasi modern tingkat *enterprise* dengan kombinasi maut Next.js 15 di Frontend dan Laravel 11 di Backend. E-book ini mencakup studi kasus pembuatan sistem e-learning yang skalabel.</p>',
+                'price'        => 149000,
+                'file_path'    => 'e_products/files/dummy1.pdf', // 🔥 DITAMBAHKAN
+                'cover_image'  => null,
                 'is_published' => true,
             ],
             [
-                'title' => 'E-Book: Rahasia Karir UI/UX Designer',
-                'description' => '<p>Buku digital ini membahas langkah demi langkah membangun portofolio UI/UX yang dilirik oleh HRD tech company ternama. Berisi template CV, studi kasus nyata, dan cara menjawab interview design.</p>',
-                'price' => 75000,
-                'cover_image' => null,
-                'file_path' => 'e_products/files/dummy-ebook.pdf',
+                'user_id'      => $admin->id,
+                'title'        => 'Template UI/UX Figma: Sistem Tryout CPNS VILT Stack',
+                'slug'         => Str::slug('Template UI UX Figma Sistem Tryout CPNS'),
+                'description'  => '<p>Akselerasi proses desain Anda dengan *template* Figma responsif khusus untuk aplikasi Tryout CAT CPNS. Dilengkapi dengan *design system*, komponen interaktif, dan panduan implementasi ke Vue/Inertia/Tailwind.</p>',
+                'price'        => 89000,
+                'file_path'    => 'e_products/files/dummy2.zip', // 🔥 DITAMBAHKAN
+                'cover_image'  => null,
                 'is_published' => true,
             ],
             [
-                'title' => 'Template Notion: Manajemen Proyek Organizer',
-                'description' => '<p>Tingkatkan produktivitas tim event kamu dengan template Notion eksklusif yang biasa digunakan oleh Top Event Organizer. <strong>100% GRATIS!</strong></p>',
-                'price' => 0, // 🔥 Produk Gratis untuk testing bypass Midtrans
-                'cover_image' => null,
-                'file_path' => 'e_products/files/dummy-notion.pdf',
+                'user_id'      => $admin->id,
+                'title'        => 'Panduan Dasar Jaringan Komputer & Mikrotik',
+                'slug'         => Str::slug('Panduan Dasar Jaringan Komputer Mikrotik'),
+                'description'  => '<p>E-Book panduan praktis untuk mahasiswa Informatika. Membahas *subnetting*, konfigurasi dasar Cisco IOS, *dynamic routing* (OSPF, RIP), dan manajemen Mikrotik via Winbox secara komprehensif.</p>',
+                'price'        => 0, // Produk Gratis
+                'file_path'    => 'e_products/files/dummy3.pdf', // 🔥 DITAMBAHKAN
+                'cover_image'  => null,
                 'is_published' => true,
-            ]
+            ],
         ];
 
-        // 3. Masukkan ke Database
-        foreach ($products as $item) {
-            EProduct::create([
-                'user_id' => $admin->id,
-                'title' => $item['title'],
-                'slug' => Str::slug($item['title']) . '-' . uniqid(),
-                'description' => $item['description'],
-                'price' => $item['price'],
-                'cover_image' => $item['cover_image'],
-                'file_path' => $item['file_path'],
-                'is_published' => $item['is_published'],
-            ]);
-        }
+        foreach ($products as $prodData) {
+            $product = EProduct::create($prodData);
 
-        $this->command->info('E-Product Seeder berhasil dijalankan! 3 Produk Dummy telah ditambahkan.');
+            // 4. Buat Simulasi Transaksi (Purchase) untuk si Member
+            $purchase = EProductPurchase::create([
+                'reference'        => 'INV-EP-' . strtoupper(Str::random(8)),
+                'tripay_reference' => 'DEV-' . strtoupper(Str::random(10)),
+                'user_id'          => $member->id,
+                'e_product_id'     => $product->id,
+                'amount'           => $product->price,
+                'checkout_url'     => 'https://tripay.co.id/checkout/dummy',
+                'status'           => 'PAID',
+            ]);
+
+            // 5. Beri Ulasan (Review) pada 2 produk pertama
+            if ($product->price > 0) {
+                EProductReview::create([
+                    'e_product_id' => $product->id,
+                    'user_id'      => $member->id,
+                    'rating'       => 5,
+                    'review'       => 'Sangat bermanfaat! Materi terstruktur rapi dan mudah diimplementasikan ke project skripsi/tugas akhir.',
+                ]);
+            }
+        }
     }
 }

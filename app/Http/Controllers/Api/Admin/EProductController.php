@@ -37,24 +37,27 @@ class EProductController extends Controller
             'title' => 'required|string|max:255',
             'description' => 'required|string',
             'price' => 'required|integer|min:0',
-            'cover_image' => 'nullable|image|mimes:jpeg,png,jpg,webp|max:10240', // Cover maks 2MB
-            'file_path' => 'required|file|mimes:pdf,zip,rar|max:512000', // File asli maks 50MB
+            'cover_image' => 'nullable|image|mimes:jpeg,png,jpg,webp|max:10240', // Maks 10MB
+            // Wajib pilih salah satu: file upload ATAU link gdrive
+            'file_upload' => 'required_without:file_link|nullable|file|mimes:pdf,zip,rar|max:51200', // Maks 50MB
+            'file_link'   => 'required_without:file_upload|nullable|string|url', 
             'is_published' => 'required|boolean'
         ]);
 
         $data = $request->only(['title', 'description', 'price', 'is_published']);
         $data['slug'] = Str::slug($request->title) . '-' . uniqid();
-        $data['user_id'] = $request->user()->id; // Superadmin yang upload
+        $data['user_id'] = $request->user()->id; 
 
         // Upload Cover
         if ($request->hasFile('cover_image')) {
             $data['cover_image'] = $request->file('cover_image')->store('e_products/covers', 'public');
         }
 
-        // Upload File Asli (E-Book / Template) - Ditaruh di private/public folder tergantung keamanan
-        // Untuk saat ini kita taruh di public agar mudah diakses dengan link token nantinya
-        if ($request->hasFile('file_path')) {
-            $data['file_path'] = $request->file('file_path')->store('e_products/files', 'public');
+        // Eksekusi Tipe File Asli
+        if ($request->hasFile('file_upload')) {
+            $data['file_path'] = $request->file('file_upload')->store('e_products/files', 'public');
+        } elseif ($request->filled('file_link')) {
+            $data['file_path'] = $request->file_link;
         }
 
         $product = EProduct::create($data);
@@ -77,8 +80,9 @@ class EProductController extends Controller
             'title' => 'required|string|max:255',
             'description' => 'required|string',
             'price' => 'required|integer|min:0',
-            'cover_image' => 'nullable|image|mimes:jpeg,png,jpg,webp|max:2048',
-            'file_path' => 'nullable|file|mimes:pdf,zip,rar|max:51200', // Boleh kosong kalau gak ganti file
+            'cover_image' => 'nullable|image|mimes:jpeg,png,jpg,webp|max:10240', // Maks 10MB
+            'file_upload' => 'nullable|file|mimes:pdf,zip,rar|max:51200', // Maks 50MB
+            'file_link'   => 'nullable|string|url',
             'is_published' => 'required|boolean'
         ]);
 
@@ -90,18 +94,26 @@ class EProductController extends Controller
 
         // Update Cover
         if ($request->hasFile('cover_image')) {
-            if ($product->cover_image && Storage::disk('public')->exists($product->cover_image)) {
+            // Hapus cover lama jika bukan link eksternal
+            if ($product->cover_image && !Str::startsWith($product->cover_image, ['http://', 'https://']) && Storage::disk('public')->exists($product->cover_image)) {
                 Storage::disk('public')->delete($product->cover_image);
             }
             $data['cover_image'] = $request->file('cover_image')->store('e_products/covers', 'public');
         }
 
         // Update File Asli
-        if ($request->hasFile('file_path')) {
-            if ($product->file_path && Storage::disk('public')->exists($product->file_path)) {
+        if ($request->hasFile('file_upload')) {
+            // Hapus file fisik lama
+            if ($product->file_path && !Str::startsWith($product->file_path, ['http://', 'https://']) && Storage::disk('public')->exists($product->file_path)) {
                 Storage::disk('public')->delete($product->file_path);
             }
-            $data['file_path'] = $request->file('file_path')->store('e_products/files', 'public');
+            $data['file_path'] = $request->file('file_upload')->store('e_products/files', 'public');
+        } elseif ($request->filled('file_link')) {
+            // Jika beralih ke Link, hapus file fisik lama (jika ada)
+            if ($product->file_path && !Str::startsWith($product->file_path, ['http://', 'https://']) && Storage::disk('public')->exists($product->file_path)) {
+                Storage::disk('public')->delete($product->file_path);
+            }
+            $data['file_path'] = $request->file_link;
         }
 
         $product->update($data);
@@ -120,11 +132,10 @@ class EProductController extends Controller
     {
         $product = EProduct::findOrFail($id);
 
-        // Hapus file fisik
-        if ($product->cover_image && Storage::disk('public')->exists($product->cover_image)) {
+        if ($product->cover_image && !Str::startsWith($product->cover_image, ['http://', 'https://']) && Storage::disk('public')->exists($product->cover_image)) {
             Storage::disk('public')->delete($product->cover_image);
         }
-        if ($product->file_path && Storage::disk('public')->exists($product->file_path)) {
+        if ($product->file_path && !Str::startsWith($product->file_path, ['http://', 'https://']) && Storage::disk('public')->exists($product->file_path)) {
             Storage::disk('public')->delete($product->file_path);
         }
 

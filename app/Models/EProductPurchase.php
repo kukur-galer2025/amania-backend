@@ -9,13 +9,14 @@ class EProductPurchase extends Model
 {
     use HasFactory;
 
+    // 🔥 SESUAIKAN DENGAN KOLOM MIGRASI TRIPAY 🔥
     protected $fillable = [
-        'invoice_code',
+        'reference',
+        'tripay_reference',
         'user_id',
         'e_product_id',
         'amount',
-        'snap_token',
-        'payment_url',
+        'checkout_url',
         'status'
     ];
 
