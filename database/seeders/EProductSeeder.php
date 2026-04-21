@@ -2,95 +2,110 @@
 
 namespace Database\Seeders;
 
-use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
-use App\Models\User;
+use Illuminate\Support\Str;
 use App\Models\EProduct;
 use App\Models\EProductPurchase;
 use App\Models\EProductReview;
-use Illuminate\Support\Str;
-use Illuminate\Support\Facades\Hash;
+use App\Models\User;
+use Faker\Factory as Faker;
 
 class EProductSeeder extends Seeder
 {
     public function run(): void
     {
-        // 1. Buat Dummy Author (Superadmin)
-        $admin = User::firstOrCreate(
-            ['email' => 'adminku@amania.id'],
+        $faker = Faker::create('id_ID');
+
+        // 1. Pastikan ada user pembuat produk (Admin/Author)
+        $author = User::firstOrCreate(
+            ['email' => 'admin@amania.id'],
             [
                 'name' => 'Admin Amania',
-                'password' => Hash::make('password123'),
-                'role' => 'superadmin'
+                'password' => bcrypt('password'),
+                // Sesuaikan jika Anda menggunakan Spatie Permission atau kolom string biasa untuk role
+                'role' => 'superadmin' 
             ]
         );
 
-        // 2. Buat Dummy Buyer (User)
-        $member = User::firstOrCreate(
-            ['email' => 'member@amania.id'],
-            [
-                'name' => 'Member Setia',
-                'password' => Hash::make('password123'),
-                'role' => 'user' 
-            ]
-        );
+        // 2. Buat beberapa user dummy sebagai pembeli
+        $buyers = [];
+        for ($i = 1; $i <= 5; $i++) {
+            $buyers[] = User::firstOrCreate(
+                ['email' => "pembeli{$i}@gmail.com"],
+                [
+                    'name' => $faker->name,
+                    'password' => bcrypt('password'),
+                    'role' => 'user'
+                ]
+            );
+        }
 
-        // 3. Buat Data E-Products
-        $products = [
+        // 3. Daftar Produk Digital (E-Product)
+        $productsData = [
             [
-                'user_id'      => $admin->id,
-                'title'        => 'Masterclass Fullstack Web Development (Next.js 15 & Laravel 11)',
-                'slug'         => Str::slug('Masterclass Fullstack Web Development Next.js Laravel'),
-                'description'  => '<p>Pelajari cara membangun aplikasi modern tingkat *enterprise* dengan kombinasi maut Next.js 15 di Frontend dan Laravel 11 di Backend. E-book ini mencakup studi kasus pembuatan sistem e-learning yang skalabel.</p>',
-                'price'        => 149000,
-                'file_path'    => 'e_products/files/dummy1.pdf', // 🔥 DITAMBAHKAN
-                'cover_image'  => null,
-                'is_published' => true,
+                'title' => 'E-Book Masterclass Lolos CPNS & Kedinasan 2026',
+                'description' => 'Panduan komprehensif berisi trik cepat menjawab soal TWK, TIU, dan TKP. Dilengkapi dengan rangkuman materi dari FR (Field Report) tahun-tahun sebelumnya yang sering keluar.',
+                'price' => 85000,
             ],
             [
-                'user_id'      => $admin->id,
-                'title'        => 'Template UI/UX Figma: Sistem Tryout CPNS VILT Stack',
-                'slug'         => Str::slug('Template UI UX Figma Sistem Tryout CPNS'),
-                'description'  => '<p>Akselerasi proses desain Anda dengan *template* Figma responsif khusus untuk aplikasi Tryout CAT CPNS. Dilengkapi dengan *design system*, komponen interaktif, dan panduan implementasi ke Vue/Inertia/Tailwind.</p>',
-                'price'        => 89000,
-                'file_path'    => 'e_products/files/dummy2.zip', // 🔥 DITAMBAHKAN
-                'cover_image'  => null,
-                'is_published' => true,
+                'title' => 'Bundle Template CV & Surat Lamaran ATS Friendly',
+                'description' => 'Kumpulan 20+ template CV dan Surat Lamaran Kerja (Bahasa Indonesia & Inggris) berstandar ATS yang dijamin memperbesar peluang Anda lolos screening HRD BUMN dan Perusahaan Multinasional.',
+                'price' => 45000,
             ],
             [
-                'user_id'      => $admin->id,
-                'title'        => 'Panduan Dasar Jaringan Komputer & Mikrotik',
-                'slug'         => Str::slug('Panduan Dasar Jaringan Komputer Mikrotik'),
-                'description'  => '<p>E-Book panduan praktis untuk mahasiswa Informatika. Membahas *subnetting*, konfigurasi dasar Cisco IOS, *dynamic routing* (OSPF, RIP), dan manajemen Mikrotik via Winbox secara komprehensif.</p>',
-                'price'        => 0, // Produk Gratis
-                'file_path'    => 'e_products/files/dummy3.pdf', // 🔥 DITAMBAHKAN
-                'cover_image'  => null,
-                'is_published' => true,
+                'title' => 'Video Rekaman Webinar: Rahasia Interview Kerja',
+                'description' => 'Akses eksklusif rekaman webinar 3 jam membedah cara menjawab pertanyaan jebakan HRD saat wawancara kerja, lengkap dengan studi kasus.',
+                'price' => 125000,
             ],
+            [
+                'title' => 'Checklist Persiapan Berkas CPNS (Edisi Gratis)',
+                'description' => 'Dokumen PDF berisi checklist lengkap persyaratan dokumen yang wajib disiapkan sebelum portal SSCASN dibuka. Jangan sampai gagal seleksi administrasi!',
+                'price' => 0, // Produk Gratis
+            ]
         ];
 
-        foreach ($products as $prodData) {
-            $product = EProduct::create($prodData);
-
-            // 4. Buat Simulasi Transaksi (Purchase) untuk si Member
-            $purchase = EProductPurchase::create([
-                'reference'        => 'INV-EP-' . strtoupper(Str::random(8)),
-                'tripay_reference' => 'DEV-' . strtoupper(Str::random(10)),
-                'user_id'          => $member->id,
-                'e_product_id'     => $product->id,
-                'amount'           => $product->price,
-                'checkout_url'     => 'https://tripay.co.id/checkout/dummy',
-                'status'           => 'PAID',
+        // Eksekusi Pembuatan Data
+        foreach ($productsData as $data) {
+            // Buat E-Product
+            $product = EProduct::create([
+                'user_id'      => $author->id,
+                'title'        => $data['title'],
+                'slug'         => Str::slug($data['title'] . '-' . Str::random(5)),
+                'description'  => '<p>' . $data['description'] . '</p>',
+                'price'        => $data['price'],
+                'cover_image'  => null, // Kosongkan dulu, atau isi dengan path gambar jika sudah ada
+                'file_path'    => 'dummy/file-' . Str::random(5) . '.pdf',
+                'is_published' => true,
             ]);
 
-            // 5. Beri Ulasan (Review) pada 2 produk pertama
-            if ($product->price > 0) {
-                EProductReview::create([
-                    'e_product_id' => $product->id,
-                    'user_id'      => $member->id,
-                    'rating'       => 5,
-                    'review'       => 'Sangat bermanfaat! Materi terstruktur rapi dan mudah diimplementasikan ke project skripsi/tugas akhir.',
+            // Ambil 3-4 pembeli acak untuk produk ini
+            $randomBuyers = $faker->randomElements($buyers, rand(3, 4));
+
+            foreach ($randomBuyers as $buyer) {
+                // Tentukan status acak (Banyakan PAID agar ada review-nya)
+                $status = $data['price'] == 0 ? 'PAID' : $faker->randomElement(['PAID', 'UNPAID', 'PAID', 'PAID']);
+
+                // Buat Riwayat Pembelian
+                EProductPurchase::create([
+                    'reference'        => 'INV-EP-' . strtoupper(Str::random(8)) . '-' . $buyer->id,
+                    'tripay_reference' => $status === 'PAID' && $data['price'] > 0 ? 'DEV-T' . strtoupper(Str::random(10)) : null,
+                    'user_id'          => $buyer->id,
+                    'e_product_id'     => $product->id,
+                    'amount'           => $data['price'],
+                    'checkout_url'     => $status === 'UNPAID' ? 'https://tripay.co.id/checkout/dummy' : null,
+                    'status'           => $status,
                 ]);
+
+                // Buat Ulasan (Review) HANYA jika statusnya PAID
+                if ($status === 'PAID') {
+                    EProductReview::create([
+                        'e_product_id' => $product->id,
+                        'user_id'      => $buyer->id,
+                        // Kasih rating bagus (4 atau 5)
+                        'rating'       => $faker->numberBetween(4, 5), 
+                        'review'       => $faker->sentence(rand(6, 12)) . ' ' . $faker->randomElement(['Sangat bermanfaat!', 'Terima kasih Amania.', 'Mantap materinya.']),
+                    ]);
+                }
             }
         }
     }

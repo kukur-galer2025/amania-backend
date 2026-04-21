@@ -7,22 +7,41 @@ use App\Models\EProduct;
 use App\Models\EProductPurchase;
 use App\Models\EProductReview;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Str;
 
 class EProductController extends Controller
 {
     /**
-     * 🔥 TAMPILKAN SEMUA E-PRODUK DI KATALOG (PUBLIK) 🔥
+     * 🔥 TAMPILKAN SEMUA E-PRODUK DI KATALOG (PUBLIK & MEMBER) 🔥
      */
-    public function index()
+    public function index(Request $request)
     {
-        $products = EProduct::where('is_published', true)
+        $query = EProduct::where('is_published', true)
             ->withAvg('reviews', 'rating')
             ->withCount('reviews')
-            ->latest()
-            ->get();
+            ->latest();
+
+        $products = $query->get();
+        $user = auth('sanctum')->user(); // Cek apakah ada user yang sedang login
+
+        // Jika user login, cek produk mana saja yang sudah dibeli
+        if ($user) {
+            $purchasedProductIds = EProductPurchase::where('user_id', $user->id)
+                ->whereIn('status', ['PAID', 'success'])
+                ->pluck('e_product_id')
+                ->toArray();
+
+            // Tambahkan atribut buatan 'is_purchased'
+            $products->map(function ($product) use ($purchasedProductIds) {
+                $product->is_purchased = in_array($product->id, $purchasedProductIds);
+                return $product;
+            });
+        } else {
+            // Jika tamu, otomatis false semua
+            $products->map(function ($product) {
+                $product->is_purchased = false;
+                return $product;
+            });
+        }
 
         return response()->json([
             'success' => true,
@@ -46,114 +65,22 @@ class EProductController extends Controller
             return response()->json(['success' => false, 'message' => 'Produk tidak ditemukan.'], 404);
         }
 
+        // Cek apakah user sedang login dan sudah membeli produk ini
+        $user = auth('sanctum')->user();
+        if ($user) {
+            $isPurchased = EProductPurchase::where('user_id', $user->id)
+                ->where('e_product_id', $product->id)
+                ->whereIn('status', ['PAID', 'success'])
+                ->exists();
+            $product->is_purchased = $isPurchased;
+        } else {
+            $product->is_purchased = false;
+        }
+
         return response()->json([
             'success' => true,
             'data' => $product
         ]);
-    }
-
-    /**
-     * 🔥 CHECKOUT PEMBELIAN E-PRODUK MENGGUNAKAN TRIPAY 🔥
-     */
-    public function checkout(Request $request)
-    {
-        $request->validate([
-            'e_product_id' => 'required|exists:e_products,id',
-            'method'       => 'nullable|string' 
-        ]);
-
-        $user = $request->user();
-        $product = EProduct::findOrFail($request->e_product_id);
-        
-        // 1. Cek apakah user sudah pernah beli dan statusnya Lunas (PAID / success)
-        $hasPurchased = EProductPurchase::where('user_id', $user->id)
-            ->where('e_product_id', $product->id)
-            ->whereIn('status', ['PAID', 'success'])
-            ->exists();
-
-        if ($hasPurchased) {
-            return response()->json(['success' => false, 'message' => 'Anda sudah memiliki akses ke produk digital ini.']);
-        }
-
-        // 2. Jika Produk GRATIS (Bypass Tripay)
-        if ($product->price == 0) {
-            EProductPurchase::create([
-                'user_id'      => $user->id,
-                'e_product_id' => $product->id,
-                'amount'       => 0,
-                'status'       => 'PAID', // Langsung Aktif
-                'reference'    => 'FREE-' . time() . '-' . $user->id,
-                'tripay_reference' => null,
-                'checkout_url' => null
-            ]);
-            return response()->json(['success' => true, 'is_free' => true]);
-        }
-
-        // 3. SETUP TRIPAY MENGGUNAKAN CONFIG (MENCEGAH ERROR ENV)
-        $apiKey       = config('tripay.api_key');
-        $privateKey   = config('tripay.private_key');
-        $merchantCode = config('tripay.merchant_code');
-        $apiUrl       = config('tripay.api_url') . 'transaction/create';
-        
-        $merchantRef  = 'EPRD-' . strtoupper(Str::random(8)) . '-' . $user->id;
-        $amount       = (int) $product->price;
-        $paymentMethod = $request->method ?? 'QRIS'; // Default ke QRIS
-
-        // Membuat Signature Tripay
-        $signature = hash_hmac('sha256', $merchantCode.$merchantRef.$amount, $privateKey);
-
-        $payload = [
-            'method'         => $paymentMethod,
-            'merchant_ref'   => $merchantRef,
-            'amount'         => $amount,
-            'customer_name'  => $user->name,
-            'customer_email' => $user->email,
-            'customer_phone' => $user->phone ?? '081234567890',
-            'order_items'    => [
-                [
-                    'sku'         => 'EPRD-' . $product->id,
-                    'name'        => substr($product->title, 0, 50),
-                    'price'       => $amount,
-                    'quantity'    => 1,
-                ]
-            ],
-            // Return URL agar user otomatis kembali ke halaman web setelah bayar
-            'return_url'   => config('app.frontend_url', 'http://localhost:3000') . '/e-products/' . $product->slug,
-            'expired_time' => (time() + (24 * 60 * 60)), // Expired dalam 24 Jam
-            'signature'    => $signature
-        ];
-
-        try {
-            // Eksekusi HTTP Request ke Tripay
-            $response = Http::withToken($apiKey)->post($apiUrl, $payload);
-            $result = $response->json();
-
-            if ($response->successful() && isset($result['success']) && $result['success'] == true) {
-                
-                // 4. Simpan Data Transaksi Pending ke Database sesuai Migration Tripay
-                EProductPurchase::create([
-                    'reference'        => $merchantRef,
-                    'tripay_reference' => $result['data']['reference'],
-                    'user_id'          => $user->id,
-                    'e_product_id'     => $product->id,
-                    'amount'           => $amount,
-                    'status'           => 'UNPAID', // Status awal belum dibayar
-                    'checkout_url'     => $result['data']['checkout_url']
-                ]);
-
-                return response()->json([
-                    'success'      => true,
-                    'checkout_url' => $result['data']['checkout_url'] 
-                ]);
-            }
-
-            Log::error('Tripay API Error: ', $result ?? []);
-            return response()->json(['success' => false, 'message' => $result['message'] ?? 'Gagal memproses pembayaran Tripay. Pastikan metode pembayaran benar.']);
-
-        } catch (\Exception $e) {
-            Log::error('Tripay HTTP Error: ' . $e->getMessage());
-            return response()->json(['success' => false, 'message' => 'Gagal terhubung ke server pembayaran Tripay.']);
-        }
     }
 
     /**
@@ -196,6 +123,23 @@ class EProductController extends Controller
             'success' => true,
             'message' => 'Terima kasih! Ulasan kamu berhasil disimpan.',
             'data' => $review
+        ]);
+    }
+
+    /**
+     * 🔥 MENGAMBIL E-PRODUK YANG SUDAH DIBELI USER (LUNAS) 🔥
+     */
+    public function myProducts(Request $request)
+    {
+        $purchases = EProductPurchase::with(['product', 'product.author'])
+            ->where('user_id', $request->user()->id)
+            ->whereIn('status', ['PAID', 'success'])
+            ->latest()
+            ->get();
+
+        return response()->json([
+            'success' => true,
+            'data' => $purchases
         ]);
     }
 }

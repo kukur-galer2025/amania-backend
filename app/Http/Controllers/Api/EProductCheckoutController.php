@@ -5,7 +5,6 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\EProduct;
 use App\Models\EProductPurchase;
-use App\Models\SkdTransaction;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -14,11 +13,43 @@ use Illuminate\Support\Facades\Log;
 
 class EProductCheckoutController extends Controller
 {
-    /**
-     * =========================================================================
-     * 1. FUNGSI CHECKOUT E-PRODUCT (TRIPAY)
-     * =========================================================================
-     */
+    // =========================================================================
+    // 1. MENGAMBIL DAFTAR METODE PEMBAYARAN DARI TRIPAY
+    // =========================================================================
+    public function getPaymentChannels()
+    {
+        try {
+            $apiKey = config('tripay.api_key');
+            $apiUrl = rtrim(config('tripay.api_url'), '/') . '/merchant/payment-channel';
+
+            $response = Http::withoutVerifying()->withToken($apiKey)->get($apiUrl);
+            $result = $response->json();
+
+            if ($response->successful() && isset($result['success']) && $result['success'] == true) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Berhasil mengambil metode pembayaran dari Tripay.',
+                    'data'    => $result['data']
+                ], 200);
+            }
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal terhubung ke Tripay.',
+            ], 400);
+
+        } catch (\Exception $e) {
+            Log::error('Tripay Channels Error: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Sistem Error: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    // =========================================================================
+    // 2. FUNGSI CHECKOUT E-PRODUCT (TRIPAY)
+    // =========================================================================
     public function purchaseEProduct(Request $request)
     {
         $request->validate([
@@ -29,7 +60,6 @@ class EProductCheckoutController extends Controller
         $user    = $request->user();
         $product = EProduct::where('is_published', true)->findOrFail($request->e_product_id);
 
-        // Cek apakah sudah punya produk ini (Status PAID)
         $alreadyBought = EProductPurchase::where('user_id', $user->id)
             ->where('e_product_id', $product->id)
             ->whereIn('status', ['PAID', 'success'])
@@ -49,10 +79,9 @@ class EProductCheckoutController extends Controller
                 'user_id'      => $user->id,
                 'e_product_id' => $product->id,
                 'amount'       => $amount,
-                'status'       => 'UNPAID', // Status awal Tripay
+                'status'       => 'UNPAID',
             ]);
 
-            // Jika Produk Gratis (Bypass Tripay)
             if ($amount == 0) {
                 $purchase->update(['status' => 'PAID']);
                 DB::commit();
@@ -63,11 +92,9 @@ class EProductCheckoutController extends Controller
                 ]);
             }
 
-            // --- TRIPAY LOGIC UNTUK E-PRODUCT ---
             $privateKey   = config('tripay.private_key');
             $merchantCode = config('tripay.merchant_code');
             $apiKey       = config('tripay.api_key');
-            // Memastikan URL valid & tidak double slash
             $apiUrl       = rtrim(config('tripay.api_url'), '/') . '/transaction/create';
 
             $signature = hash_hmac('sha256', $merchantCode . $merchantRef . $amount, $privateKey);
@@ -78,7 +105,7 @@ class EProductCheckoutController extends Controller
                 'amount'         => $amount,
                 'customer_name'  => $user->name ?? 'Member Amania',
                 'customer_email' => $user->email ?? 'email@amania.id',
-                'customer_phone' => '081234567890',
+                'customer_phone' => $user->phone ?? '080000000000',
                 'order_items'    => [
                     [
                         'sku'      => 'EP-' . $product->id,
@@ -88,20 +115,18 @@ class EProductCheckoutController extends Controller
                     ]
                 ],
                 'return_url'   => config('app.frontend_url', 'http://localhost:3000') . '/e-products/' . $product->slug,
-                'expired_time' => (time() + (24 * 60 * 60)), // 24 Jam
+                'expired_time' => (time() + (24 * 60 * 60)),
                 'signature'    => $signature
             ];
 
-            $response = Http::withToken($apiKey)->post($apiUrl, $payload);
+            $response = Http::withoutVerifying()->withToken($apiKey)->post($apiUrl, $payload);
             $result = $response->json();
 
             if ($response->successful() && isset($result['success']) && $result['success'] == true) {
-                // Update tabel sesuai dengan migrasi Tripay
                 $purchase->update([
                     'tripay_reference' => $result['data']['reference'], 
                     'checkout_url'     => $result['data']['checkout_url'],
                 ]);
-                
                 DB::commit();
 
                 return response()->json([
@@ -118,16 +143,13 @@ class EProductCheckoutController extends Controller
         } catch (\Exception $e) {
             DB::rollBack();
             Log::error('Checkout System Error: ' . $e->getMessage());
-            // Mengembalikan pesan error langsung ke frontend agar mudah di-debug
             return response()->json(['success' => false, 'message' => 'Terjadi kesalahan DB/Sistem: ' . $e->getMessage()], 500);
         }
     }
 
-    /**
-     * =========================================================================
-     * 2. UNIVERSAL WEBHOOK TRIPAY (MENANGANI SKD & E-PRODUCT)
-     * =========================================================================
-     */
+    // =========================================================================
+    // 3. WEBHOOK KHUSUS E-PRODUCT (TRIPAY)
+    // =========================================================================
     public function tripayWebhook(Request $request)
     {
         $callbackSignature = $request->server('HTTP_X_CALLBACK_SIGNATURE');
@@ -145,22 +167,10 @@ class EProductCheckoutController extends Controller
 
         $data = json_decode($json);
         $merchantRef = $data->merchant_ref;
-        $status = $data->status; // 'PAID', 'UNPAID', 'EXPIRED', 'FAILED'
+        $status = $data->status; 
 
         try {
-            // --- A. LOGIKA SKD TRYOUT ---
-            if (Str::startsWith($merchantRef, 'SKD-')) {
-                $transaction = SkdTransaction::where('merchant_ref', $merchantRef)->first();
-                if (!$transaction) return response()->json(['success' => false, 'message' => 'Transaction not found'], 404);
-
-                if ($status === 'PAID') {
-                    $transaction->update(['status' => 'PAID', 'paid_at' => now()]);
-                } elseif (in_array($status, ['EXPIRED', 'FAILED'])) {
-                    $transaction->update(['status' => $status]);
-                }
-            } 
-            // --- B. LOGIKA E-PRODUCT ---
-            elseif (Str::startsWith($merchantRef, 'INV-EP-')) {
+            if (Str::startsWith($merchantRef, 'INV-EP-')) {
                 $purchase = EProductPurchase::where('reference', $merchantRef)->first();
                 if (!$purchase) return response()->json(['success' => false, 'message' => 'Purchase not found'], 404);
 
@@ -169,8 +179,7 @@ class EProductCheckoutController extends Controller
                 } elseif (in_array($status, ['EXPIRED', 'FAILED'])) {
                     $purchase->update(['status' => $status]);
                 }
-            } 
-            else {
+            } else {
                 Log::warning('Tripay Webhook: Unknown Merchant Ref format => ' . $merchantRef);
                 return response()->json(['success' => false, 'message' => 'Format Merchant Ref tidak dikenali'], 400);
             }
