@@ -19,8 +19,9 @@ class EProductCheckoutController extends Controller
     public function getPaymentChannels()
     {
         try {
-            $apiKey = config('tripay.api_key');
-            $apiUrl = rtrim(config('tripay.api_url'), '/') . '/merchant/payment-channel';
+            // Menggunakan env() langsung untuk memastikan kredensial terbaca
+            $apiKey = env('TRIPAY_API_KEY');
+            $apiUrl = rtrim(env('TRIPAY_URL', 'https://tripay.co.id/api/'), '/') . '/merchant/payment-channel';
 
             $response = Http::withoutVerifying()
                 ->withToken($apiKey)
@@ -38,7 +39,8 @@ class EProductCheckoutController extends Controller
 
             return response()->json([
                 'success' => false,
-                'message' => 'Gagal mengambil metode pembayaran dari Tripay.',
+                'message' => 'Tripay Error: ' . ($result['message'] ?? 'API Key/URL tidak valid.'),
+                'debug'   => $result
             ], 400);
 
         } catch (\Exception $e) {
@@ -63,7 +65,7 @@ class EProductCheckoutController extends Controller
         $user    = $request->user();
         $product = EProduct::where('is_published', true)->findOrFail($request->e_product_id);
 
-        // Cek apakah user sudah membeli
+        // Cek apakah user sudah pernah membeli produk ini dan lunas
         $alreadyBought = EProductPurchase::where('user_id', $user->id)
             ->where('e_product_id', $product->id)
             ->whereIn('status', ['PAID', 'success', 'SETTLED'])
@@ -73,7 +75,7 @@ class EProductCheckoutController extends Controller
             return response()->json(['success' => false, 'message' => 'Anda sudah memiliki akses ke produk digital ini.']);
         }
 
-        // Cek apakah ada invoice yang masih UNPAID
+        // Cek apakah ada invoice yang masih menggantung (UNPAID)
         $pendingInvoice = EProductPurchase::where('user_id', $user->id)
             ->where('e_product_id', $product->id)
             ->where('status', 'UNPAID')
@@ -82,7 +84,7 @@ class EProductCheckoutController extends Controller
         if ($pendingInvoice && $pendingInvoice->checkout_url) {
             return response()->json([
                 'success'      => true,
-                'message'      => 'Silakan lanjutkan pembayaran pada invoice sebelumnya.',
+                'message'      => 'Silakan lanjutkan pembayaran pada tagihan sebelumnya.',
                 'checkout_url' => $pendingInvoice->checkout_url,
             ]);
         }
@@ -92,6 +94,7 @@ class EProductCheckoutController extends Controller
 
         DB::beginTransaction();
         try {
+            // Buat record transaksi di database kita
             $purchase = EProductPurchase::create([
                 'reference'    => $merchantRef, 
                 'user_id'      => $user->id,
@@ -100,7 +103,7 @@ class EProductCheckoutController extends Controller
                 'status'       => 'UNPAID',
             ]);
 
-            // Jika produk gratis
+            // Jika produknya gratis, langsung set PAID
             if ($amount == 0) {
                 $purchase->update(['status' => 'PAID']);
                 DB::commit();
@@ -114,14 +117,12 @@ class EProductCheckoutController extends Controller
             // ==========================================
             // 🔥 LOGIKA SIGNATURE & REQUEST TRIPAY 🔥
             // ==========================================
-            $privateKey   = config('tripay.private_key');
-            $merchantCode = config('tripay.merchant_code');
-            $apiKey       = config('tripay.api_key');
-            
-            // Endpoint untuk Closed Payment Tripay
-            $apiUrl       = rtrim(config('tripay.api_url'), '/') . '/transaction/create';
+            $privateKey   = env('TRIPAY_PRIVATE_KEY');
+            $merchantCode = env('TRIPAY_MERCHANT_CODE');
+            $apiKey       = env('TRIPAY_API_KEY');
+            $apiUrl       = rtrim(env('TRIPAY_URL', 'https://tripay.co.id/api/'), '/') . '/transaction/create';
 
-            // FORMAT SIGNATURE TRIPAY (Closed Payment): {MerchantCode}{MerchantRef}{Amount}
+            // Signature untuk Closed Payment Tripay: {MerchantCode}{MerchantRef}{Amount}
             $signature = hash_hmac('sha256', $merchantCode . $merchantRef . $amount, $privateKey);
 
             $payload = [
@@ -139,21 +140,21 @@ class EProductCheckoutController extends Controller
                         'quantity' => 1,
                     ]
                 ],
-                // Redirect user setelah bayar di halaman Tripay
-                'return_url'   => config('app.frontend_url', 'https://amania.id') . '/e-products/' . $product->slug,
-                // Waktu kedaluwarsa 24 Jam
-                'expired_time' => (time() + (24 * 60 * 60)),
+                'return_url'   => rtrim(env('FRONTEND_URL', 'https://amania.id'), '/') . '/e-products/' . $product->slug,
+                'expired_time' => (time() + (24 * 60 * 60)), // Expired dalam 24 Jam
                 'signature'    => $signature
             ];
 
+            // Kirim request ke Tripay
             $response = Http::withoutVerifying()
                 ->withToken($apiKey)
                 ->post($apiUrl, $payload);
                 
             $result = $response->json();
 
-            // Jika Tripay Berhasil
+            // Jika respons dari Tripay Sukses
             if ($response->successful() && isset($result['success']) && $result['success'] == true) {
+                // Update transaksi kita dengan referensi dan URL dari Tripay
                 $purchase->update([
                     'tripay_reference' => $result['data']['reference'], 
                     'checkout_url'     => $result['data']['checkout_url'],
@@ -167,7 +168,7 @@ class EProductCheckoutController extends Controller
                 ]);
             }
 
-            // Jika Tripay Gagal
+            // Jika Tripay menolak request (misal: signature salah, limit habis)
             DB::rollBack();
             Log::error('Tripay Create Transaction Error: ', $result ?? []);
             return response()->json([
@@ -194,7 +195,7 @@ class EProductCheckoutController extends Controller
         $json = $request->getContent();
         
         // 3. Validasi Signature menggunakan Private Key Tripay
-        $signature = hash_hmac('sha256', $json, config('tripay.private_key'));
+        $signature = hash_hmac('sha256', $json, env('TRIPAY_PRIVATE_KEY'));
 
         if ($signature !== $callbackSignature) {
             Log::warning('Tripay Webhook: Invalid Signature');
@@ -212,6 +213,7 @@ class EProductCheckoutController extends Controller
         $status = $data->status; // PAID, UNPAID, EXPIRED, FAILED
 
         try {
+            // Pastikan format referensi sesuai dengan kode kita 'INV-EP-'
             if (Str::startsWith($merchantRef, 'INV-EP-')) {
                 $purchase = EProductPurchase::where('reference', $merchantRef)->first();
                 
@@ -219,7 +221,7 @@ class EProductCheckoutController extends Controller
                     return response()->json(['success' => false, 'message' => 'Purchase not found'], 404);
                 }
 
-                // Update status sesuai balikan dari Tripay
+                // Update status sesuai instruksi dari Tripay
                 if (in_array($status, ['PAID', 'SETTLED'])) {
                     $purchase->update(['status' => 'PAID']);
                 } elseif (in_array($status, ['EXPIRED', 'FAILED', 'REFUND'])) {
