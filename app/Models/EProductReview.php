@@ -25,7 +25,6 @@ class EProductReview extends Model
     // Relasi ke E-Produk
     public function eProduct()
     {
-        // 🔥 PERBAIKAN: Tambahkan 'e_product_id' secara eksplisit 🔥
         return $this->belongsTo(EProduct::class, 'e_product_id');
     }
 }

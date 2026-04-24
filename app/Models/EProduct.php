@@ -11,6 +11,7 @@ class EProduct extends Model
 
     protected $fillable = [
         'user_id',
+        'e_product_category_id', // 🔥 Kolom relasi kategori baru ditambahkan ke sini
         'title',
         'slug',
         'description',
@@ -23,6 +24,12 @@ class EProduct extends Model
     public function author()
     {
         return $this->belongsTo(User::class, 'user_id');
+    }
+
+    // 🔥 RELASI KE KATEGORI E-PRODUK 🔥
+    public function category()
+    {
+        return $this->belongsTo(EProductCategory::class, 'e_product_category_id');
     }
 
     public function purchases()

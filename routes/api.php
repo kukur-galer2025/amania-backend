@@ -32,6 +32,7 @@ use App\Http\Controllers\Api\Admin\ReportController as AdminReport;
 use App\Http\Controllers\Api\Admin\GlobalSearchController as AdminGlobalSearch;
 use App\Http\Controllers\Api\Admin\NotificationController as AdminNotification;
 use App\Http\Controllers\Api\Admin\EProductController as AdminEProduct;
+use App\Http\Controllers\Api\Admin\EProductCategoryController as AdminEProductCategory;
 use App\Http\Controllers\Api\Admin\ImageUploadController;
 
 /*
@@ -59,6 +60,9 @@ Route::get('/global-search', [GlobalSearchController::class, 'search']);
 Route::get('/e-products', [EProductController::class, 'index']);
 Route::get('/e-products/{slug}', [EProductController::class, 'show']);
 
+// 🔥 RUTE PUBLIK BARU: Mengambil daftar Kategori E-Produk 🔥
+Route::get('/e-product-categories', [AdminEProductCategory::class, 'index']);
+
 // 🔥 WEBHOOK / CALLBACK TRIPAY (WAJIB PUBLIC) 🔥
 Route::post('/tripay/callback', [EProductCheckoutController::class, 'tripayWebhook']);
 
@@ -79,11 +83,11 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/notifications', [NotificationController::class, 'index']);
     Route::post('/notifications/read', [NotificationController::class, 'markAllAsRead']);
     
-    // 🔥 PERBAIKAN: Rute Checkout Tripay E-Product 🔥
+    // Rute Checkout Tripay E-Product
     Route::get('/checkout/payment-channels', [EProductCheckoutController::class, 'getPaymentChannels']);
     Route::post('/checkout/e-product', [EProductCheckoutController::class, 'purchaseEProduct']);
     
-    // 🔥 RUTE BARU: Koleksi E-Produk yang sudah dibeli 🔥
+    // Koleksi E-Produk yang sudah dibeli
     Route::get('/my-e-products', [EProductController::class, 'myProducts']);
     Route::post('/e-products/{id}/reviews', [EProductController::class, 'submitReview']);
 });
@@ -148,6 +152,11 @@ Route::middleware(['auth:sanctum', 'role:superadmin'])
     Route::post('/article-categories', [AdminCategory::class, 'store']);
     Route::put('/article-categories/{id}', [AdminCategory::class, 'update']);
     Route::delete('/article-categories/{id}', [AdminCategory::class, 'destroy']);
+
+    Route::get('/e-product-categories', [AdminEProductCategory::class, 'index']);
+    Route::post('/e-product-categories', [AdminEProductCategory::class, 'store']);
+    Route::put('/e-product-categories/{id}', [AdminEProductCategory::class, 'update']);
+    Route::delete('/e-product-categories/{id}', [AdminEProductCategory::class, 'destroy']);
 
     Route::get('/e-products', [AdminEProduct::class, 'index']);
     Route::get('/e-products/{id}', [AdminEProduct::class, 'show']);

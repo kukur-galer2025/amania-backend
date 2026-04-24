@@ -14,6 +14,7 @@ class User extends Authenticatable
     protected $fillable = [
         'name',
         'email',
+        'phone',     // 🔥 Kolom Nomor HP ditambahkan
         'password',
         'role',      // superadmin, organizer, user
         'avatar',    // Kolom foto
@@ -46,7 +47,6 @@ class User extends Authenticatable
         return $this->hasMany(Event::class, 'user_id');
     }
 
-
     public function articles()
     {
         return $this->hasMany(Article::class, 'user_id');
@@ -57,7 +57,6 @@ class User extends Authenticatable
     {
         return $this->hasMany(EProductPurchase::class, 'user_id');
     }
-
 
     public function eProducts()
     {

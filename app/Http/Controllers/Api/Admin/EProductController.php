@@ -15,7 +15,8 @@ class EProductController extends Controller
      */
     public function index()
     {
-        $products = EProduct::with('author')->latest()->get();
+        // 🔥 PERBAIKAN: Load relasi 'category' agar nama kategori muncul di tabel Admin
+        $products = EProduct::with(['author', 'category'])->latest()->get();
         return response()->json(['success' => true, 'data' => $products]);
     }
 
@@ -24,7 +25,7 @@ class EProductController extends Controller
      */
     public function show($id)
     {
-        $product = EProduct::findOrFail($id);
+        $product = EProduct::with('category')->findOrFail($id);
         return response()->json(['success' => true, 'data' => $product]);
     }
 
@@ -35,6 +36,7 @@ class EProductController extends Controller
     {
         $request->validate([
             'title' => 'required|string|max:255',
+            'e_product_category_id' => 'required|exists:e_product_categories,id', // 🔥 WAJIB ADA KATEGORI
             'description' => 'required|string',
             'price' => 'required|integer|min:0',
             'cover_image' => 'nullable|image|mimes:jpeg,png,jpg,webp|max:10240', // Maks 10MB
@@ -44,7 +46,8 @@ class EProductController extends Controller
             'is_published' => 'required|boolean'
         ]);
 
-        $data = $request->only(['title', 'description', 'price', 'is_published']);
+        // 🔥 PERBAIKAN: Masukkan e_product_category_id agar ikut tersimpan
+        $data = $request->only(['title', 'e_product_category_id', 'description', 'price', 'is_published']);
         $data['slug'] = Str::slug($request->title) . '-' . uniqid();
         $data['user_id'] = $request->user()->id; 
 
@@ -78,6 +81,7 @@ class EProductController extends Controller
 
         $request->validate([
             'title' => 'required|string|max:255',
+            'e_product_category_id' => 'required|exists:e_product_categories,id', // 🔥 WAJIB ADA KATEGORI
             'description' => 'required|string',
             'price' => 'required|integer|min:0',
             'cover_image' => 'nullable|image|mimes:jpeg,png,jpg,webp|max:10240', // Maks 10MB
@@ -86,7 +90,8 @@ class EProductController extends Controller
             'is_published' => 'required|boolean'
         ]);
 
-        $data = $request->only(['title', 'description', 'price', 'is_published']);
+        // 🔥 PERBAIKAN: Masukkan e_product_category_id agar ikut diupdate
+        $data = $request->only(['title', 'e_product_category_id', 'description', 'price', 'is_published']);
         
         if ($request->title !== $product->title) {
             $data['slug'] = Str::slug($request->title) . '-' . uniqid();

@@ -19,15 +19,17 @@ class ProfileController extends Controller
             'name' => 'required|string|max:255',
             // Pengecualian unik email untuk user itu sendiri
             'email' => 'required|string|email|max:255|unique:users,email,' . $user->id, 
+            'phone' => 'nullable|string|max:20', // 🔥 Tambahkan validasi Nomor HP
             'password' => 'nullable|string|min:8|confirmed',
-            'avatar' => 'nullable|image|mimes:jpeg,png,jpg,webp|max:5120', // <-- UBAH KE 5MB (5120 KB)
-            'bio' => 'nullable|string|max:1000', // <-- TAMBAHAN: Validasi untuk Bio
+            'avatar' => 'nullable|image|mimes:jpeg,png,jpg,webp|max:5120',
+            'bio' => 'nullable|string|max:1000',
         ]);
 
-        // Update nama, email, dan bio
+        // Update nama, email, phone, dan bio
         $user->name = $request->name;
         $user->email = $request->email;
-        $user->bio = $request->bio; // <-- TAMBAHAN: Simpan data bio
+        $user->phone = $request->phone; // 🔥 Simpan Nomor HP baru
+        $user->bio = $request->bio; 
 
         // Jika user mengisi password baru, update passwordnya
         if ($request->filled('password')) {

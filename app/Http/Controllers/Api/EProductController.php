@@ -15,7 +15,9 @@ class EProductController extends Controller
      */
     public function index(Request $request)
     {
+        // PERBAIKAN: Tambahkan with(['author', 'category']) agar data relasi ikut terbawa ke frontend
         $query = EProduct::where('is_published', true)
+            ->with(['author:id,name', 'category:id,name']) 
             ->withAvg('reviews', 'rating')
             ->withCount('reviews')
             ->latest();
@@ -54,9 +56,10 @@ class EProductController extends Controller
      */
     public function show($slug)
     {
+        // PERBAIKAN: Tambahkan 'category:id,name' ke dalam with()
         $product = EProduct::where('slug', $slug)
             ->where('is_published', true)
-            ->with(['author:id,name', 'reviews.user:id,name,avatar'])
+            ->with(['author:id,name', 'reviews.user:id,name,avatar', 'category:id,name'])
             ->withAvg('reviews', 'rating')
             ->withCount('reviews')
             ->first();
@@ -131,7 +134,8 @@ class EProductController extends Controller
      */
     public function myProducts(Request $request)
     {
-        $purchases = EProductPurchase::with(['product', 'product.author'])
+        // PERBAIKAN: Muat juga kategori agar rapi di halaman koleksi user
+        $purchases = EProductPurchase::with(['product', 'product.author:id,name', 'product.category:id,name'])
             ->where('user_id', $request->user()->id)
             ->whereIn('status', ['PAID', 'success'])
             ->latest()
