@@ -65,7 +65,8 @@ return [
     |
     */
 
-    'timezone' => 'UTC',
+    // 🔥 PERBAIKAN TIMEZONE: Diubah ke Waktu Indonesia Barat (WIB) 🔥
+    'timezone' => 'Asia/Jakarta',
 
     /*
     |--------------------------------------------------------------------------
@@ -78,11 +79,13 @@ return [
     |
     */
 
-    'locale' => env('APP_LOCALE', 'en'),
+    // 🔥 PERBAIKAN LOCALE: Diubah ke Bahasa Indonesia 🔥
+    'locale' => env('APP_LOCALE', 'id'),
 
     'fallback_locale' => env('APP_FALLBACK_LOCALE', 'en'),
 
-    'faker_locale' => env('APP_FAKER_LOCALE', 'en_US'),
+    // 🔥 PERBAIKAN FAKER: Diubah ke format data dummy Indonesia 🔥
+    'faker_locale' => env('APP_FAKER_LOCALE', 'id_ID'),
 
     /*
     |--------------------------------------------------------------------------
