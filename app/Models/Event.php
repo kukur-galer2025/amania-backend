@@ -24,7 +24,9 @@ class Event extends Model
         'certificate_link', 
         'certificate_tier',
         'image',
-        'user_id' // 🔥 DITAMBAHKAN: Agar ID Organizer bisa disimpan saat create event
+        'user_id', // 🔥 DITAMBAHKAN: Agar ID Organizer bisa disimpan saat create event
+        'join_link',         // 🔥 TAMBAHAN BARU: Link Zoom/Gmeet
+        'join_instructions', // 🔥 TAMBAHAN BARU: Instruksi/Password meeting
     ];
 
     protected $casts = [
