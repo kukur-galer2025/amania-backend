@@ -14,6 +14,9 @@ use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\GlobalSearchController; 
 use App\Http\Controllers\Api\EProductController;
 
+// 🔥 IMPORT MY EVENT CONTROLLER (JANGAN DIHAPUS AGAR RUANG KELAS AMAN) 🔥
+use App\Http\Controllers\Api\MyEventController;
+
 // --- 2. Import Checkout Controllers ---
 use App\Http\Controllers\Api\EProductCheckoutController;
 
@@ -60,10 +63,8 @@ Route::get('/global-search', [GlobalSearchController::class, 'search']);
 Route::get('/e-products', [EProductController::class, 'index']);
 Route::get('/e-products/{slug}', [EProductController::class, 'show']);
 
-// 🔥 RUTE PUBLIK BARU: Mengambil daftar Kategori E-Produk 🔥
 Route::get('/e-product-categories', [AdminEProductCategory::class, 'index']);
 
-// 🔥 WEBHOOK / CALLBACK TRIPAY (WAJIB PUBLIC) 🔥
 Route::post('/tripay/callback', [EProductCheckoutController::class, 'tripayWebhook']);
 
 // =========================================================================
@@ -83,13 +84,15 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/notifications', [NotificationController::class, 'index']);
     Route::post('/notifications/read', [NotificationController::class, 'markAllAsRead']);
     
-    // Rute Checkout Tripay E-Product
     Route::get('/checkout/payment-channels', [EProductCheckoutController::class, 'getPaymentChannels']);
     Route::post('/checkout/e-product', [EProductCheckoutController::class, 'purchaseEProduct']);
     
-    // Koleksi E-Produk yang sudah dibeli
     Route::get('/my-e-products', [EProductController::class, 'myProducts']);
     Route::post('/e-products/{id}/reviews', [EProductController::class, 'submitReview']);
+
+    // 🔥 API KHUSUS MY EVENT (RUANG KELAS PRIVAT) 🔥
+    Route::get('/my-events/{slug}', [MyEventController::class, 'show']);
+    Route::get('/my-events/{slug}/download-poster', [MyEventController::class, 'downloadPoster']);
 });
 
 

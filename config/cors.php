@@ -6,14 +6,20 @@ return [
     |--------------------------------------------------------------------------
     | Cross-Origin Resource Sharing (CORS) Configuration
     |--------------------------------------------------------------------------
+    |
+    | Here you may configure your settings for cross-origin resource sharing
+    | or "CORS". This determines what cross-origin operations may execute
+    | in web browsers. You are free to adjust these settings as needed.
+    |
     */
 
-    'paths' => ['api/*', 'sanctum/csrf-cookie'],
+    // 1. TAMBAHKAN 'storage/*' AGAR FILE IMAGE BISA DI-FETCH SEBAGAI BLOB
+    'paths' => ['api/*', 'sanctum/csrf-cookie', 'storage/*'],
 
     'allowed_methods' => ['*'],
 
-    // UBAH BARIS INI MENJADI BINTANG (*)
-    'allowed_origins' => ['*'], 
+    // 2. MENGGUNAKAN '*' AGAR AMAN DI LOKAL MAUPUN HOSTING
+    'allowed_origins' => ['*'],
 
     'allowed_origins_patterns' => [],
 
@@ -23,6 +29,7 @@ return [
 
     'max_age' => 0,
 
-    'supports_credentials' => false,
+    // 3. SET TRUE JIKA KAMU MENGGUNAKAN COOKIE/SESSION (SANCTUM)
+    'supports_credentials' => true,
 
 ];
