@@ -9,7 +9,6 @@ class EProductPurchase extends Model
 {
     use HasFactory;
 
-    // 🔥 SESUAIKAN DENGAN KOLOM MIGRASI TRIPAY 🔥
     protected $fillable = [
         'reference',
         'tripay_reference',
@@ -17,16 +16,15 @@ class EProductPurchase extends Model
         'e_product_id',
         'amount',
         'checkout_url',
+        'expired_time', 
         'status'
     ];
 
-    // Pembeli
     public function buyer()
     {
         return $this->belongsTo(User::class, 'user_id');
     }
 
-    // Produk yang dibeli
     public function product()
     {
         return $this->belongsTo(EProduct::class, 'e_product_id');

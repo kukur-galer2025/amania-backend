@@ -15,7 +15,6 @@ class EProductController extends Controller
      */
     public function index(Request $request)
     {
-        // PERBAIKAN: Tambahkan with(['author', 'category']) agar data relasi ikut terbawa ke frontend
         $query = EProduct::where('is_published', true)
             ->with(['author:id,name', 'category:id,name']) 
             ->withAvg('reviews', 'rating')
@@ -23,22 +22,19 @@ class EProductController extends Controller
             ->latest();
 
         $products = $query->get();
-        $user = auth('sanctum')->user(); // Cek apakah ada user yang sedang login
+        $user = auth('sanctum')->user();
 
-        // Jika user login, cek produk mana saja yang sudah dibeli
         if ($user) {
             $purchasedProductIds = EProductPurchase::where('user_id', $user->id)
                 ->whereIn('status', ['PAID', 'success'])
                 ->pluck('e_product_id')
                 ->toArray();
 
-            // Tambahkan atribut buatan 'is_purchased'
             $products->map(function ($product) use ($purchasedProductIds) {
                 $product->is_purchased = in_array($product->id, $purchasedProductIds);
                 return $product;
             });
         } else {
-            // Jika tamu, otomatis false semua
             $products->map(function ($product) {
                 $product->is_purchased = false;
                 return $product;
@@ -56,7 +52,6 @@ class EProductController extends Controller
      */
     public function show($slug)
     {
-        // PERBAIKAN: Tambahkan 'category:id,name' ke dalam with()
         $product = EProduct::where('slug', $slug)
             ->where('is_published', true)
             ->with(['author:id,name', 'reviews.user:id,name,avatar', 'category:id,name'])
@@ -68,7 +63,6 @@ class EProductController extends Controller
             return response()->json(['success' => false, 'message' => 'Produk tidak ditemukan.'], 404);
         }
 
-        // Cek apakah user sedang login dan sudah membeli produk ini
         $user = auth('sanctum')->user();
         if ($user) {
             $isPurchased = EProductPurchase::where('user_id', $user->id)
@@ -98,7 +92,6 @@ class EProductController extends Controller
 
         $user = $request->user();
 
-        // Validasi ketat: Pastikan user SUDAH PERNAH BELI dan statusnya PAID / success
         $hasPurchased = EProductPurchase::where('user_id', $user->id)
             ->where('e_product_id', $id)
             ->whereIn('status', ['PAID', 'success'])
@@ -131,10 +124,10 @@ class EProductController extends Controller
 
     /**
      * 🔥 MENGAMBIL E-PRODUK YANG SUDAH DIBELI USER (LUNAS) 🔥
+     * Digunakan untuk halaman koleksi belajar
      */
     public function myProducts(Request $request)
     {
-        // PERBAIKAN: Muat juga kategori agar rapi di halaman koleksi user
         $purchases = EProductPurchase::with(['product', 'product.author:id,name', 'product.category:id,name'])
             ->where('user_id', $request->user()->id)
             ->whereIn('status', ['PAID', 'success'])
@@ -144,6 +137,23 @@ class EProductController extends Controller
         return response()->json([
             'success' => true,
             'data' => $purchases
+        ]);
+    }
+
+    /**
+     * 🔥 MENGAMBIL SEMUA RIWAYAT TRANSAKSI E-PRODUK (PAID & UNPAID) 🔥
+     * Digunakan untuk halaman Riwayat Transaksi agar user bisa lanjut bayar
+     */
+    public function myTransactions(Request $request)
+    {
+        $transactions = EProductPurchase::with(['product', 'product.author:id,name', 'product.category:id,name'])
+            ->where('user_id', $request->user()->id)
+            ->latest()
+            ->get();
+
+        return response()->json([
+            'success' => true,
+            'data' => $transactions
         ]);
     }
 }

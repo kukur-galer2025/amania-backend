@@ -19,12 +19,21 @@ class EProductCheckoutController extends Controller
     public function getPaymentChannels()
     {
         try {
-            // Menggunakan env() langsung untuk memastikan kredensial terbaca
             $apiKey = env('TRIPAY_API_KEY');
+            
+            if (empty($apiKey)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'TRIPAY_API_KEY belum dikonfigurasi di file .env backend Anda.'
+                ], 400);
+            }
+
             $apiUrl = rtrim(env('TRIPAY_URL', 'https://tripay.co.id/api/'), '/') . '/merchant/payment-channel';
 
             $response = Http::withoutVerifying()
-                ->withToken($apiKey)
+                ->withHeaders([
+                    'Authorization' => 'Bearer ' . $apiKey
+                ])
                 ->get($apiUrl);
                 
             $result = $response->json();
@@ -39,7 +48,7 @@ class EProductCheckoutController extends Controller
 
             return response()->json([
                 'success' => false,
-                'message' => 'Tripay Error: ' . ($result['message'] ?? 'API Key/URL tidak valid.'),
+                'message' => 'Tripay Error: ' . ($result['message'] ?? 'Kredensial API Key tidak valid.'),
                 'debug'   => $result
             ], 400);
 
@@ -65,7 +74,7 @@ class EProductCheckoutController extends Controller
         $user    = $request->user();
         $product = EProduct::where('is_published', true)->findOrFail($request->e_product_id);
 
-        // Cek apakah user sudah pernah membeli produk ini dan lunas
+        // 1. CEK STATUS LUNAS: Pencegahan ganda jika user sudah bayar.
         $alreadyBought = EProductPurchase::where('user_id', $user->id)
             ->where('e_product_id', $product->id)
             ->whereIn('status', ['PAID', 'success', 'SETTLED'])
@@ -75,37 +84,24 @@ class EProductCheckoutController extends Controller
             return response()->json(['success' => false, 'message' => 'Anda sudah memiliki akses ke produk digital ini.']);
         }
 
-        // Cek apakah ada invoice yang masih menggantung (UNPAID)
-        $pendingInvoice = EProductPurchase::where('user_id', $user->id)
-            ->where('e_product_id', $product->id)
-            ->where('status', 'UNPAID')
-            ->first();
-
-        if ($pendingInvoice && $pendingInvoice->checkout_url) {
-            return response()->json([
-                'success'      => true,
-                'message'      => 'Silakan lanjutkan pembayaran pada tagihan sebelumnya.',
-                'checkout_url' => $pendingInvoice->checkout_url,
-            ]);
-        }
+        // 🔥 IDE ANDA DITERAPKAN DI SINI 🔥
+        // Kita TIDAK LAGI membatalkan invoice lama menjadi EXPIRED. 
+        // Biarkan user membuat banyak invoice UNPAID (Misal: 1 QRIS, 1 VA BCA).
 
         $merchantRef = 'INV-EP-' . strtoupper(Str::random(8)) . '-' . $user->id;
         $amount = (int) $product->price;
 
         DB::beginTransaction();
         try {
-            // Buat record transaksi di database kita
-            $purchase = EProductPurchase::create([
-                'reference'    => $merchantRef, 
-                'user_id'      => $user->id,
-                'e_product_id' => $product->id,
-                'amount'       => $amount,
-                'status'       => 'UNPAID',
-            ]);
-
-            // Jika produknya gratis, langsung set PAID
+            // JIKA GRATIS (BYPASS TRIPAY)
             if ($amount == 0) {
-                $purchase->update(['status' => 'PAID']);
+                EProductPurchase::create([
+                    'reference'    => $merchantRef, 
+                    'user_id'      => $user->id,
+                    'e_product_id' => $product->id,
+                    'amount'       => 0,
+                    'status'       => 'PAID',
+                ]);
                 DB::commit();
                 return response()->json([
                     'success'  => true,
@@ -115,18 +111,25 @@ class EProductCheckoutController extends Controller
             }
 
             // ==========================================
-            // 🔥 LOGIKA SIGNATURE & REQUEST TRIPAY 🔥
+            // LOGIKA SIGNATURE & REQUEST TRIPAY
             // ==========================================
             $privateKey   = env('TRIPAY_PRIVATE_KEY');
             $merchantCode = env('TRIPAY_MERCHANT_CODE');
             $apiKey       = env('TRIPAY_API_KEY');
-            $apiUrl       = rtrim(env('TRIPAY_URL', 'https://tripay.co.id/api/'), '/') . '/transaction/create';
 
-            // Signature untuk Closed Payment Tripay: {MerchantCode}{MerchantRef}{Amount}
+            if (empty($privateKey) || empty($merchantCode) || empty($apiKey)) {
+                DB::rollBack();
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Gagal: Kredensial Tripay belum lengkap di file .env backend.'
+                ], 400);
+            }
+
+            $apiUrl = rtrim(env('TRIPAY_URL', 'https://tripay.co.id/api/'), '/') . '/transaction/create';
             $signature = hash_hmac('sha256', $merchantCode . $merchantRef . $amount, $privateKey);
 
             $payload = [
-                'method'         => $request->method,
+                'method'         => $request->input('method'),
                 'merchant_ref'   => $merchantRef,
                 'amount'         => $amount,
                 'customer_name'  => $user->name ?? 'Member Amania',
@@ -141,24 +144,31 @@ class EProductCheckoutController extends Controller
                     ]
                 ],
                 'return_url'   => rtrim(env('FRONTEND_URL', 'https://amania.id'), '/') . '/e-products/' . $product->slug,
-                'expired_time' => (time() + (24 * 60 * 60)), // Expired dalam 24 Jam
+                'expired_time' => (time() + (24 * 60 * 60)), // Expired default 24 Jam
                 'signature'    => $signature
             ];
 
-            // Kirim request ke Tripay
+            // KIRIM REQUEST KE TRIPAY
             $response = Http::withoutVerifying()
-                ->withToken($apiKey)
+                ->withHeaders(['Authorization' => 'Bearer ' . $apiKey])
                 ->post($apiUrl, $payload);
                 
             $result = $response->json();
 
-            // Jika respons dari Tripay Sukses
+            // JIKA TRIPAY SUKSES, SIMPAN KE DATABASE
             if ($response->successful() && isset($result['success']) && $result['success'] == true) {
-                // Update transaksi kita dengan referensi dan URL dari Tripay
-                $purchase->update([
-                    'tripay_reference' => $result['data']['reference'], 
+                
+                EProductPurchase::create([
+                    'reference'        => $merchantRef, 
+                    'tripay_reference' => $result['data']['reference'],
+                    'user_id'          => $user->id,
+                    'e_product_id'     => $product->id,
+                    'amount'           => $amount,
                     'checkout_url'     => $result['data']['checkout_url'],
+                    'expired_time'     => $result['data']['expired_time'] ?? null,
+                    'status'           => 'UNPAID', // Status awal selalu UNPAID
                 ]);
+                
                 DB::commit();
 
                 return response()->json([
@@ -168,7 +178,7 @@ class EProductCheckoutController extends Controller
                 ]);
             }
 
-            // Jika Tripay menolak request (misal: signature salah, limit habis)
+            // Jika Tripay menolak request
             DB::rollBack();
             Log::error('Tripay Create Transaction Error: ', $result ?? []);
             return response()->json([
@@ -179,7 +189,10 @@ class EProductCheckoutController extends Controller
         } catch (\Exception $e) {
             DB::rollBack();
             Log::error('Checkout System Error: ' . $e->getMessage());
-            return response()->json(['success' => false, 'message' => 'Terjadi kesalahan DB/Sistem: ' . $e->getMessage()], 500);
+            return response()->json([
+                'success' => false, 
+                'message' => 'Terjadi kesalahan Sistem: ' . $e->getMessage()
+            ], 500);
         }
     }
 
@@ -188,13 +201,9 @@ class EProductCheckoutController extends Controller
     // =========================================================================
     public function tripayWebhook(Request $request)
     {
-        // 1. Ambil Signature dari Header
         $callbackSignature = $request->header('X-Callback-Signature') ?? $request->server('HTTP_X_CALLBACK_SIGNATURE');
-        
-        // 2. Ambil Body JSON murni
         $json = $request->getContent();
         
-        // 3. Validasi Signature menggunakan Private Key Tripay
         $signature = hash_hmac('sha256', $json, env('TRIPAY_PRIVATE_KEY'));
 
         if ($signature !== $callbackSignature) {
@@ -202,7 +211,6 @@ class EProductCheckoutController extends Controller
             return response()->json(['success' => false, 'message' => 'Invalid signature'], 403);
         }
 
-        // 4. Validasi Event (Hanya tangkap status pembayaran)
         $event = $request->header('X-Callback-Event') ?? $request->server('HTTP_X_CALLBACK_EVENT');
         if ('payment_status' !== $event) {
             return response()->json(['success' => false, 'message' => 'Unrecognized callback event'], 400);
@@ -210,10 +218,9 @@ class EProductCheckoutController extends Controller
 
         $data = json_decode($json);
         $merchantRef = $data->merchant_ref;
-        $status = $data->status; // PAID, UNPAID, EXPIRED, FAILED
+        $status = $data->status;
 
         try {
-            // Pastikan format referensi sesuai dengan kode kita 'INV-EP-'
             if (Str::startsWith($merchantRef, 'INV-EP-')) {
                 $purchase = EProductPurchase::where('reference', $merchantRef)->first();
                 
@@ -221,11 +228,21 @@ class EProductCheckoutController extends Controller
                     return response()->json(['success' => false, 'message' => 'Purchase not found'], 404);
                 }
 
-                // Update status sesuai instruksi dari Tripay
+                // 🔥 IDE ANDA DITERAPKAN DI SINI (DI DALAM WEBHOOK) 🔥
                 if (in_array($status, ['PAID', 'SETTLED'])) {
+                    
+                    // 1. LUNASKAN TAGIHAN INI
                     $purchase->update(['status' => 'PAID']);
+
+                    // 2. EXPIRED-KAN SEMUA TAGIHAN UNPAID LAINNYA UNTUK USER & PRODUK YANG SAMA
+                    EProductPurchase::where('user_id', $purchase->user_id)
+                        ->where('e_product_id', $purchase->e_product_id)
+                        ->where('id', '!=', $purchase->id) // Kecuali tagihan yang baru saja lunas ini
+                        ->where('status', 'UNPAID')
+                        ->update(['status' => 'EXPIRED']);
+
                 } elseif (in_array($status, ['EXPIRED', 'FAILED', 'REFUND'])) {
-                    $purchase->update(['status' => $status]);
+                    $purchase->update(['status' => 'EXPIRED']);
                 }
 
             } else {

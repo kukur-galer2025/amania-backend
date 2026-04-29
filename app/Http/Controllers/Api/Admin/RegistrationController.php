@@ -19,19 +19,17 @@ class RegistrationController extends Controller
         $currentUser = $request->user();
         $query = Registration::with(['event', 'user']);
 
-        // 🔥 LOGIKA MULTI-TENANT: ORGANIZER HANYA LIHAT EVENT MILIKNYA 🔥
+        // LOGIKA MULTI-TENANT: ORGANIZER HANYA LIHAT EVENT MILIKNYA
         if ($currentUser->role === 'organizer') {
             $query->whereHas('event', function ($q) use ($currentUser) {
                 $q->where('user_id', $currentUser->id);
             });
         }
 
-        // Filter berdasarkan event jika ada
         if ($request->has('event_id') && $request->event_id != 'all') {
             $query->where('event_id', $request->event_id);
         }
 
-        // Filter pencarian berdasarkan nama user atau kode tiket
         if ($request->has('search') && !empty($request->search)) {
             $search = $request->search;
             $query->where(function($q) use ($search) {
@@ -56,10 +54,8 @@ class RegistrationController extends Controller
     public function verify(Request $request, $id)
     {
         $currentUser = $request->user();
-        // Eager load event dan user agar data notifikasi lengkap
         $reg = Registration::with(['event', 'user'])->findOrFail($id);
 
-        // 🔥 PROTEKSI: Cegah Organizer memverifikasi event milik orang lain 🔥
         if ($currentUser->role === 'organizer' && $reg->event->user_id !== $currentUser->id) {
             return response()->json([
                 'success' => false,
@@ -88,7 +84,7 @@ class RegistrationController extends Controller
             'rejection_reason' => null 
         ]);
 
-        // 🔥 TRIGGER NOTIFIKASI KE MEMBER 🔥
+        // TRIGGER NOTIFIKASI KE MEMBER
         if ($reg->user) {
             $reg->user->notify(new UserStatusNotification($reg, 'verified'));
         }
@@ -112,7 +108,6 @@ class RegistrationController extends Controller
         $currentUser = $request->user();
         $reg = Registration::with(['event', 'user'])->findOrFail($id);
 
-        // 🔥 PROTEKSI: Cegah Organizer menolak event milik orang lain 🔥
         if ($currentUser->role === 'organizer' && $reg->event->user_id !== $currentUser->id) {
             return response()->json([
                 'success' => false,
@@ -132,7 +127,7 @@ class RegistrationController extends Controller
             'rejection_reason' => $request->reason 
         ]);
 
-        // 🔥 TRIGGER NOTIFIKASI KE MEMBER 🔥
+        // TRIGGER NOTIFIKASI KE MEMBER
         if ($reg->user) {
             $reg->user->notify(new UserStatusNotification($reg, 'rejected'));
         }
@@ -152,7 +147,6 @@ class RegistrationController extends Controller
         $currentUser = $request->user();
         $reg = Registration::with(['event'])->findOrFail($id);
         
-        // 🔥 PROTEKSI MULTI-TENANT 🔥
         if ($currentUser->role === 'organizer' && $reg->event->user_id !== $currentUser->id) {
             return response()->json([
                 'success' => false,

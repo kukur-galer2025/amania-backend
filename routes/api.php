@@ -89,6 +89,9 @@ Route::middleware('auth:sanctum')->group(function () {
     
     Route::get('/my-e-products', [EProductController::class, 'myProducts']);
     Route::post('/e-products/{id}/reviews', [EProductController::class, 'submitReview']);
+    
+    // 🔥 API BARU KHUSUS RIWAYAT TRANSAKSI E-PRODUK (SEMUA STATUS) 🔥
+    Route::get('/my-eproduct-transactions', [EProductController::class, 'myTransactions']);
 
     // 🔥 API KHUSUS MY EVENT (RUANG KELAS PRIVAT) 🔥
     Route::get('/my-events/{slug}', [MyEventController::class, 'show']);

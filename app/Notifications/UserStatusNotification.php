@@ -31,11 +31,11 @@ class UserStatusNotification extends Notification
         if ($this->status === 'verified') {
             return [
                 'title' => 'Pendaftaran Diverifikasi! 🎉',
-                'message' => "Selamat! Pembayaran untuk kelas \"$eventName\" telah disetujui. Silakan cek E-Ticket Anda.",
+                'message' => "Selamat! Pembayaran untuk kelas \"$eventName\" telah disetujui. Silakan masuk ke Ruang Kelas.",
                 'event_name' => $eventName,
                 'status' => 'verified',
-                // 🔥 SESUAIKAN: Langsung arahkan ke detail tiket dengan Query Parameter baru
-                'url' => "/dashboard/ticket/detail?slug={$eventSlug}"
+                // 🔥 PERBAIKAN: Langsung arahkan ke Ruang Kelas (My Events)
+                'url' => "/my-events/{$eventSlug}"
             ];
         } else {
             return [
@@ -43,7 +43,7 @@ class UserStatusNotification extends Notification
                 'message' => "Maaf, pembayaran untuk kelas \"$eventName\" ditolak. Alasan: " . ($this->registration->rejection_reason ?? 'Bukti tidak valid.'),
                 'event_name' => $eventName,
                 'status' => 'rejected',
-                // Tetap ke dashboard tiket utama agar user bisa lihat alasan & upload ulang
+                // 🔥 PERBAIKAN: Arahkan ke halaman tiket agar bisa reupload bukti
                 'url' => '/dashboard/ticket'
             ];
         }
