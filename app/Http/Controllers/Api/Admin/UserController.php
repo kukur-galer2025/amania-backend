@@ -34,12 +34,13 @@ class UserController extends Controller
         $request->validate([
             'name' => 'required|string|max:255',
             'email' => 'required|email|unique:users,email',
+            'phone' => 'nullable|string|max:20', // Opsional, tambahkan phone
             'password' => 'required|string|min:6',
             'role' => 'required|in:superadmin,organizer,user',
             'avatar' => 'nullable|image|mimes:jpeg,png,jpg,webp|max:5120' // Maksimal 5MB
         ]);
 
-        $data = $request->only(['name', 'email', 'role']);
+        $data = $request->only(['name', 'email', 'phone', 'role']);
         $data['password'] = Hash::make($request->password);
 
         // Proses Upload Avatar jika ada
@@ -65,14 +66,14 @@ class UserController extends Controller
 
         $request->validate([
             'name' => 'required|string|max:255',
-            // Email harus unik, tapi abaikan jika itu email milik user ini sendiri
             'email' => 'required|email|unique:users,email,' . $user->id,
+            'phone' => 'nullable|string|max:20', // Opsional, tambahkan phone
             'role' => 'required|in:superadmin,organizer,user',
-            'password' => 'nullable|string|min:6', // Opsional, hanya jika ingin ganti password
+            'password' => 'nullable|string|min:6', 
             'avatar' => 'nullable|image|mimes:jpeg,png,jpg,webp|max:5120' // Maks 5MB
         ]);
 
-        $data = $request->only(['name', 'email', 'role']);
+        $data = $request->only(['name', 'email', 'phone', 'role']);
 
         // Jika password diisi, maka update passwordnya
         if ($request->filled('password')) {

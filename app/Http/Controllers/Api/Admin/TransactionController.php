@@ -27,11 +27,11 @@ class TransactionController extends Controller
 
         $transactions = $queryReg->latest()->get();
 
-        // Hitung Statistik Keuangan Sesuai Filter Role
+        // Hitung Statistik Keuangan Sesuai Filter Role (Dibulatkan ke Int)
         $globalStats = [
-            'total_revenue'  => (clone $queryReg)->where('status', 'verified')->sum('total_amount'),
-            'pending_count'  => (clone $queryReg)->where('status', 'pending')->count(),
-            'verified_count' => (clone $queryReg)->where('status', 'verified')->count(),
+            'total_revenue'  => (int) (clone $queryReg)->where('status', 'verified')->sum('total_amount'),
+            'pending_count'  => (int) (clone $queryReg)->where('status', 'pending')->count(),
+            'verified_count' => (int) (clone $queryReg)->where('status', 'verified')->count(),
         ];
 
         // Ambil daftar event untuk dropdown
