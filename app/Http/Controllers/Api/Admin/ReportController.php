@@ -16,7 +16,6 @@ class ReportController extends Controller
         $statusFilter = $request->query('status', 'all');
         $eventIdFilter = $request->query('event_id', 'all');
         
-        // 🔥 TAMBAHAN: Menerima Filter Tipe Tiket 🔥
         $tierFilter = $request->query('tier', 'all');
 
         $queryEvent = Event::query();
@@ -76,7 +75,9 @@ class ReportController extends Controller
     public function export(Request $request)
     {
         $currentUser = $request->user();
-        $query = Registration::with(['user:id,name,email', 'event:id,title']);
+        
+        // 🔥 PERBAIKAN: Menambahkan 'phone' agar bisa ditarik ke dalam laporan PDF 🔥
+        $query = Registration::with(['user:id,name,email,phone', 'event:id,title']);
 
         // 🔥 PROTEKSI MULTI-TENANT EKSPORT 🔥
         if ($currentUser->role === 'organizer') {
@@ -100,7 +101,7 @@ class ReportController extends Controller
             $statusName = strtoupper($request->status);
         }
 
-        // 🔥 TAMBAHAN: Filter Tipe Tiket (Basic / Premium) 🔥
+        // Filter Tipe Tiket
         $tierName = "Semua Tipe";
         if ($request->has('tier') && $request->tier != 'all') {
             $query->where('tier', $request->tier);
@@ -110,7 +111,7 @@ class ReportController extends Controller
         $registrations = $query->orderBy('created_at', 'desc')->get();
         $totalPendapatan = $registrations->sum('total_amount'); 
 
-        // 🔥 Buat Desain HTML untuk PDF
+        // 🔥 Buat Desain HTML untuk PDF 🔥
         $html = '
         <!DOCTYPE html>
         <html>
@@ -124,13 +125,14 @@ class ReportController extends Controller
                 .info-table td { padding: 3px; font-size: 11px; }
                 .data-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
                 .data-table th { background-color: #f1f5f9; color: #475569; padding: 8px; text-align: left; border: 1px solid #cbd5e1; font-size: 10px; text-transform: uppercase; }
-                .data-table td { padding: 6px 8px; border: 1px solid #cbd5e1; font-size: 10px; }
+                .data-table td { padding: 6px 8px; border: 1px solid #cbd5e1; font-size: 10px; vertical-align: top; }
                 .status-verified { color: #16a34a; font-weight: bold; }
                 .status-pending { color: #d97706; font-weight: bold; }
                 .status-rejected { color: #dc2626; font-weight: bold; }
                 .text-right { text-align: right; }
                 .text-center { text-align: center; }
                 .footer { margin-top: 30px; text-align: right; font-size: 10px; color: #64748b; }
+                .contact-info { font-size: 9px; color: #475569; margin-top: 3px; line-height: 1.3; }
             </style>
         </head>
         <body>
@@ -165,10 +167,10 @@ class ReportController extends Controller
                     <tr>
                         <th width="5%" class="text-center">No</th>
                         <th width="12%">Kode Tiket</th>
-                        <th width="20%">Nama Peserta</th>
-                        <th width="23%">Program Event</th>
+                        <th width="24%">Data Peserta</th>
+                        <th width="21%">Program Event</th>
                         <th width="10%">Tipe Tiket</th>
-                        <th width="15%">Waktu Daftar</th>
+                        <th width="13%">Waktu Daftar</th>
                         <th width="15%" class="text-right">Nominal / Status</th>
                     </tr>
                 </thead>
@@ -183,7 +185,13 @@ class ReportController extends Controller
                     <tr>
                         <td class="text-center">' . $no++ . '</td>
                         <td>' . ($reg->ticket_code ?? '-') . '</td>
-                        <td>' . ($reg->user->name ?? 'Unknown') . '</td>
+                        <td>
+                            <strong>' . ($reg->user->name ?? 'Unknown') . '</strong>
+                            <div class="contact-info">
+                                ' . ($reg->user->email ?? '-') . '<br>
+                                WA: ' . ($reg->user->phone ?? '-') . '
+                            </div>
+                        </td>
                         <td>' . ($reg->event->title ?? 'Unknown') . '</td>
                         <td>' . $tierLabel . '</td>
                         <td>' . $reg->created_at->format('d/m/Y H:i') . '</td>
