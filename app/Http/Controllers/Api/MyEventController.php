@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Event;
+use App\Models\EventMaterial; 
 use App\Models\Registration;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -96,7 +97,53 @@ class MyEventController extends Controller
             return response()->json(['success' => false, 'message' => 'File fisik tidak ditemukan di server'], 404);
         }
 
-        // Force browser untuk melakukan download (Otomatis melempar header content-disposition attachment)
+        // Force browser untuk melakukan download
         return Storage::disk('public')->download($event->image, 'Poster-' . $event->slug . '.jpg');
+    }
+
+    /**
+     * API Khusus Force Download Material/Modul
+     */
+    public function downloadMaterial($id)
+    {
+        $user = auth('sanctum')->user();
+        
+        if (!$user) {
+             return response()->json(['success' => false, 'message' => 'Autentikasi diperlukan'], 401);
+        }
+
+        $material = EventMaterial::find($id);
+
+        if (!$material || !$material->file_path) {
+            return response()->json(['success' => false, 'message' => 'Modul tidak ditemukan atau bukan berupa file fisik'], 404);
+        }
+        
+        // --- Proteksi: Pastikan User benar-benar punya akses ---
+        $registration = Registration::where('user_id', $user->id)
+            ->where('event_id', $material->event_id)
+            ->whereIn('status', ['pending', 'verified'])
+            ->first();
+
+        if (!$registration) {
+             return response()->json(['success' => false, 'message' => 'Anda tidak memiliki akses ke event ini.'], 403);
+        }
+
+        if ($material->access_tier === 'premium' && !in_array($registration->tier, ['premium', 'vip'])) {
+             return response()->json(['success' => false, 'message' => 'Materi ini eksklusif untuk member Premium/VIP.'], 403);
+        }
+        // --- End Proteksi ---
+
+        // Mengecek apakah file secara fisik benar-benar ada di storage public server
+        if (!Storage::disk('public')->exists($material->file_path)) {
+            return response()->json(['success' => false, 'message' => 'File fisik modul hilang dari server'], 404);
+        }
+
+        // Mengekstrak ekstensi file untuk nama file hasil unduhan
+        $extension = pathinfo($material->file_path, PATHINFO_EXTENSION);
+        $cleanTitle = preg_replace('/[^a-zA-Z0-9_-]/', '-', $material->title); // Membersihkan judul dari karakter aneh
+        $downloadName = $cleanTitle . '.' . ($extension ?: 'pdf');
+
+        // Melakukan force download 
+        return Storage::disk('public')->download($material->file_path, $downloadName);
     }
 }
