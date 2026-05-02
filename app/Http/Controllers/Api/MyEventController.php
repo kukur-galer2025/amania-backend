@@ -4,7 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Event;
-use App\Models\EventMaterial; 
+use App\Models\Material; // 🔥 PERBAIKAN: Menggunakan model Material (bukan EventMaterial)
 use App\Models\Registration;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -82,23 +82,27 @@ class MyEventController extends Controller
     }
 
     /**
-     * API Khusus Force Download Poster (Aman di Lokal maupun Hosting cPanel)
+     * API Khusus Force Download Poster 
      */
     public function downloadPoster($slug)
     {
-        $event = Event::where('slug', $slug)->first();
+        try {
+            $event = Event::where('slug', $slug)->first();
 
-        if (!$event || !$event->image) {
-            return response()->json(['success' => false, 'message' => 'Poster tidak ditemukan'], 404);
+            if (!$event || !$event->image) {
+                return response()->json(['success' => false, 'message' => 'Poster tidak ditemukan'], 404);
+            }
+
+            if (!Storage::disk('public')->exists($event->image)) {
+                return response()->json(['success' => false, 'message' => 'File fisik poster tidak ditemukan di server'], 404);
+            }
+
+            return Storage::disk('public')->download($event->image, 'Poster-' . $event->slug . '.jpg');
+
+        } catch (\Exception $e) {
+            Log::error("Download Poster Error: " . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Sistem gagal mengunduh poster: ' . $e->getMessage()], 500);
         }
-
-        // Cek lokasi fisik file gambar menggunakan facade Storage
-        if (!Storage::disk('public')->exists($event->image)) {
-            return response()->json(['success' => false, 'message' => 'File fisik tidak ditemukan di server'], 404);
-        }
-
-        // Force browser untuk melakukan download
-        return Storage::disk('public')->download($event->image, 'Poster-' . $event->slug . '.jpg');
     }
 
     /**
@@ -106,44 +110,49 @@ class MyEventController extends Controller
      */
     public function downloadMaterial($id)
     {
-        $user = auth('sanctum')->user();
-        
-        if (!$user) {
-             return response()->json(['success' => false, 'message' => 'Autentikasi diperlukan'], 401);
+        try {
+            $user = auth('sanctum')->user();
+            
+            if (!$user) {
+                 return response()->json(['success' => false, 'message' => 'Autentikasi diperlukan'], 401);
+            }
+
+            // 🔥 PERBAIKAN: Menggunakan model Material 🔥
+            $material = Material::find($id);
+
+            if (!$material || !$material->file_path) {
+                return response()->json(['success' => false, 'message' => 'Modul tidak ditemukan atau bukan berupa file fisik'], 404);
+            }
+            
+            // --- Proteksi Akses ---
+            $registration = Registration::where('user_id', $user->id)
+                ->where('event_id', $material->event_id)
+                ->whereIn('status', ['pending', 'verified'])
+                ->first();
+
+            if (!$registration) {
+                 return response()->json(['success' => false, 'message' => 'Anda tidak memiliki akses ke event ini.'], 403);
+            }
+
+            if ($material->access_tier === 'premium' && !in_array($registration->tier, ['premium', 'vip'])) {
+                 return response()->json(['success' => false, 'message' => 'Materi ini eksklusif untuk member Premium/VIP.'], 403);
+            }
+
+            // Mengecek file fisik
+            if (!Storage::disk('public')->exists($material->file_path)) {
+                return response()->json(['success' => false, 'message' => 'Maaf, file fisik modul belum diunggah atau hilang dari server.'], 404);
+            }
+
+            $extension = pathinfo($material->file_path, PATHINFO_EXTENSION);
+            $cleanTitle = preg_replace('/[^a-zA-Z0-9_-]/', '-', $material->title); 
+            $downloadName = $cleanTitle . '.' . ($extension ?: 'pdf');
+
+            return Storage::disk('public')->download($material->file_path, $downloadName);
+
+        } catch (\Exception $e) {
+            // 🔥 PERBAIKAN: Menangkap error agar tidak mengembalikan halaman HTML Whoops ke React 🔥
+            Log::error("Download Material Error: " . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Sistem gagal mengunduh modul: ' . $e->getMessage()], 500);
         }
-
-        $material = EventMaterial::find($id);
-
-        if (!$material || !$material->file_path) {
-            return response()->json(['success' => false, 'message' => 'Modul tidak ditemukan atau bukan berupa file fisik'], 404);
-        }
-        
-        // --- Proteksi: Pastikan User benar-benar punya akses ---
-        $registration = Registration::where('user_id', $user->id)
-            ->where('event_id', $material->event_id)
-            ->whereIn('status', ['pending', 'verified'])
-            ->first();
-
-        if (!$registration) {
-             return response()->json(['success' => false, 'message' => 'Anda tidak memiliki akses ke event ini.'], 403);
-        }
-
-        if ($material->access_tier === 'premium' && !in_array($registration->tier, ['premium', 'vip'])) {
-             return response()->json(['success' => false, 'message' => 'Materi ini eksklusif untuk member Premium/VIP.'], 403);
-        }
-        // --- End Proteksi ---
-
-        // Mengecek apakah file secara fisik benar-benar ada di storage public server
-        if (!Storage::disk('public')->exists($material->file_path)) {
-            return response()->json(['success' => false, 'message' => 'File fisik modul hilang dari server'], 404);
-        }
-
-        // Mengekstrak ekstensi file untuk nama file hasil unduhan
-        $extension = pathinfo($material->file_path, PATHINFO_EXTENSION);
-        $cleanTitle = preg_replace('/[^a-zA-Z0-9_-]/', '-', $material->title); // Membersihkan judul dari karakter aneh
-        $downloadName = $cleanTitle . '.' . ($extension ?: 'pdf');
-
-        // Melakukan force download 
-        return Storage::disk('public')->download($material->file_path, $downloadName);
     }
 }
