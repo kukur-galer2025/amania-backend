@@ -15,6 +15,9 @@ class ReportController extends Controller
         $currentUser = $request->user();
         $statusFilter = $request->query('status', 'all');
         $eventIdFilter = $request->query('event_id', 'all');
+        
+        // 🔥 TAMBAHAN: Menerima Filter Tipe Tiket 🔥
+        $tierFilter = $request->query('tier', 'all');
 
         $queryEvent = Event::query();
 
@@ -31,18 +34,26 @@ class ReportController extends Controller
             $queryEvent->where('id', $eventIdFilter);
         }
 
-        $events = $queryEvent->withCount(['registrations as total_peserta' => function ($q) use ($statusFilter) {
+        $events = $queryEvent->withCount(['registrations as total_peserta' => function ($q) use ($statusFilter, $tierFilter) {
                 if ($statusFilter !== 'all') {
                     $q->where('status', $statusFilter);
                 } else {
                     $q->whereIn('status', ['verified', 'pending', 'rejected']); 
                 }
+                
+                if ($tierFilter !== 'all') {
+                    $q->where('tier', $tierFilter);
+                }
             }])
-            ->withSum(['registrations as total_pendapatan' => function ($q) use ($statusFilter) {
+            ->withSum(['registrations as total_pendapatan' => function ($q) use ($statusFilter, $tierFilter) {
                 if ($statusFilter !== 'all') {
                     $q->where('status', $statusFilter);
                 } else {
                     $q->whereIn('status', ['verified', 'pending', 'rejected']);
+                }
+                
+                if ($tierFilter !== 'all') {
+                    $q->where('tier', $tierFilter);
                 }
             }], 'total_amount')
             ->orderBy('created_at', 'desc')
@@ -50,8 +61,8 @@ class ReportController extends Controller
 
         $globalStats = [
             'total_event' => $events->count(),
-            'total_semua_peserta' => $events->sum('total_peserta'),
-            'total_semua_pendapatan' => $events->sum('total_pendapatan')
+            'total_semua_peserta' => (int) $events->sum('total_peserta'),
+            'total_semua_pendapatan' => (int) $events->sum('total_pendapatan')
         ];
 
         return response()->json([
@@ -89,6 +100,13 @@ class ReportController extends Controller
             $statusName = strtoupper($request->status);
         }
 
+        // 🔥 TAMBAHAN: Filter Tipe Tiket (Basic / Premium) 🔥
+        $tierName = "Semua Tipe";
+        if ($request->has('tier') && $request->tier != 'all') {
+            $query->where('tier', $request->tier);
+            $tierName = strtoupper($request->tier);
+        }
+
         $registrations = $query->orderBy('created_at', 'desc')->get();
         $totalPendapatan = $registrations->sum('total_amount'); 
 
@@ -98,20 +116,21 @@ class ReportController extends Controller
         <html>
         <head>
             <style>
-                body { font-family: sans-serif; font-size: 12px; color: #333; }
+                body { font-family: sans-serif; font-size: 11px; color: #333; }
                 .header { text-align: center; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 2px solid #4f46e5; }
-                .title { font-size: 20px; font-weight: bold; color: #1e293b; margin: 0; }
-                .subtitle { font-size: 12px; color: #64748b; margin-top: 5px; }
+                .title { font-size: 18px; font-weight: bold; color: #1e293b; margin: 0; }
+                .subtitle { font-size: 11px; color: #64748b; margin-top: 5px; }
                 .info-table { width: 100%; margin-bottom: 20px; }
-                .info-table td { padding: 3px; font-size: 12px; }
+                .info-table td { padding: 3px; font-size: 11px; }
                 .data-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-                .data-table th { background-color: #f1f5f9; color: #475569; padding: 10px; text-align: left; border: 1px solid #cbd5e1; font-size: 11px; text-transform: uppercase; }
-                .data-table td { padding: 8px 10px; border: 1px solid #cbd5e1; }
+                .data-table th { background-color: #f1f5f9; color: #475569; padding: 8px; text-align: left; border: 1px solid #cbd5e1; font-size: 10px; text-transform: uppercase; }
+                .data-table td { padding: 6px 8px; border: 1px solid #cbd5e1; font-size: 10px; }
                 .status-verified { color: #16a34a; font-weight: bold; }
                 .status-pending { color: #d97706; font-weight: bold; }
                 .status-rejected { color: #dc2626; font-weight: bold; }
                 .text-right { text-align: right; }
-                .footer { margin-top: 30px; text-align: right; font-size: 11px; color: #64748b; }
+                .text-center { text-align: center; }
+                .footer { margin-top: 30px; text-align: right; font-size: 10px; color: #64748b; }
             </style>
         </head>
         <body>
@@ -134,15 +153,21 @@ class ReportController extends Controller
                     <td><strong>Omset Terkumpul</strong></td>
                     <td>: Rp ' . number_format($totalPendapatan, 0, ',', '.') . '</td>
                 </tr>
+                <tr>
+                    <td><strong>Tipe Tiket</strong></td>
+                    <td>: ' . $tierName . '</td>
+                    <td colspan="2"></td>
+                </tr>
             </table>
 
             <table class="data-table">
                 <thead>
                     <tr>
-                        <th width="5%">No</th>
-                        <th width="15%">Kode Tiket</th>
-                        <th width="22%">Nama Peserta</th>
-                        <th width="28%">Program Event</th>
+                        <th width="5%" class="text-center">No</th>
+                        <th width="12%">Kode Tiket</th>
+                        <th width="20%">Nama Peserta</th>
+                        <th width="23%">Program Event</th>
+                        <th width="10%">Tipe Tiket</th>
                         <th width="15%">Waktu Daftar</th>
                         <th width="15%" class="text-right">Nominal / Status</th>
                     </tr>
@@ -152,12 +177,15 @@ class ReportController extends Controller
         $no = 1;
         foreach ($registrations as $reg) {
             $statusClass = 'status-' . strtolower($reg->status);
+            $tierLabel = strtoupper($reg->tier ?? 'BASIC');
+            
             $html .= '
                     <tr>
-                        <td align="center">' . $no++ . '</td>
+                        <td class="text-center">' . $no++ . '</td>
                         <td>' . ($reg->ticket_code ?? '-') . '</td>
                         <td>' . ($reg->user->name ?? 'Unknown') . '</td>
                         <td>' . ($reg->event->title ?? 'Unknown') . '</td>
+                        <td>' . $tierLabel . '</td>
                         <td>' . $reg->created_at->format('d/m/Y H:i') . '</td>
                         <td class="text-right">
                             Rp ' . number_format($reg->total_amount, 0, ',', '.') . '<br>
@@ -167,7 +195,7 @@ class ReportController extends Controller
         }
 
         if(count($registrations) == 0){
-             $html .= '<tr><td colspan="6" align="center" style="padding: 20px;">Tidak ada data pada filter ini.</td></tr>';
+             $html .= '<tr><td colspan="7" align="center" style="padding: 20px;">Tidak ada data pada filter ini.</td></tr>';
         }
 
         $html .= '
@@ -180,7 +208,7 @@ class ReportController extends Controller
         </body>
         </html>';
 
-        $fileName = "Laporan_EduTech_" . date('Ymd_His') . ".pdf";
+        $fileName = "Laporan_Amania_" . date('Ymd_His') . ".pdf";
         $pdf = Pdf::loadHTML($html)->setPaper('A4', 'portrait');
         return $pdf->download($fileName);
     }
