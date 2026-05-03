@@ -55,8 +55,13 @@ class EventController extends Controller
             'quota' => 'required|integer',
             'basic_price' => 'required|integer',
             'premium_price' => 'nullable|integer',
+            
             'certificate_link' => 'nullable|url',
             'certificate_tier' => 'required|in:all,premium',
+            
+            // 🔥 TAMBAHAN BARU: REKAMAN ZOOM 🔥
+            'recording_link' => 'nullable|url',
+            'recording_tier' => 'required|in:all,premium',
             
             'join_link' => 'nullable|url',
             'join_instructions' => 'nullable|string',
@@ -75,8 +80,6 @@ class EventController extends Controller
             }
 
             $validated['slug'] = Str::slug($request->title) . '-' . uniqid();
-            
-            // 🔥 OTOMATIS CATAT PEMBUAT EVENT 🔥
             $validated['user_id'] = $request->user()->id; 
             
             $event = Event::create($validated);
@@ -115,8 +118,13 @@ class EventController extends Controller
             'quota' => 'required|integer',
             'basic_price' => 'required|integer', 
             'premium_price' => 'nullable|integer',
+            
             'certificate_link' => 'nullable|url',
             'certificate_tier' => 'required|in:all,premium',
+            
+            // 🔥 TAMBAHAN BARU: REKAMAN ZOOM 🔥
+            'recording_link' => 'nullable|url',
+            'recording_tier' => 'required|in:all,premium',
             
             'join_link' => 'nullable|url',
             'join_instructions' => 'nullable|string',

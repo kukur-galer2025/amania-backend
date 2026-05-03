@@ -4,7 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Event;
-use App\Models\Material; // 🔥 PERBAIKAN: Menggunakan model Material (bukan EventMaterial)
+use App\Models\Material; 
 use App\Models\Registration;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -32,7 +32,6 @@ class MyEventController extends Controller
                 return response()->json(['success' => false, 'message' => 'Event tidak ditemukan'], 404);
             }
 
-            // Validasi ketat: Apakah user ini terdaftar dan sudah diverifikasi / pending
             $registration = Registration::where('user_id', $user->id)
                 ->where('event_id', $event->id)
                 ->whereIn('status', ['pending', 'verified'])
@@ -42,15 +41,29 @@ class MyEventController extends Controller
                 return response()->json(['success' => false, 'message' => 'Akses ditolak. Anda belum terdaftar di event ini.'], 403);
             }
 
-            // Lampirkan data registrasi ke object event
             $event->user_registration = $registration;
 
-            // ── LOGIKA PEMBATASAN AKSES MATERI DI RUANG KELAS PRIVAT ──
-            if (in_array($registration->tier, ['free', 'basic']) || $registration->status === 'pending') {
-                if ($event->certificate_tier === 'premium') {
+            // ── LOGIKA KEAMANAN AKSES (SERTIFIKAT, REKAMAN & MODUL) ──
+            if ($registration->status === 'pending') {
+                // Jika masih pending, sembunyikan semua link sensitif
+                $event->join_link = null;
+                $event->join_instructions = null;
+                $event->certificate_link = null;
+                $event->recording_link = null; // Sembunyikan rekaman
+            } else {
+                // Jika sudah diverifikasi, cek Tier-nya (Basic / Premium)
+                if ($event->certificate_tier === 'premium' && !in_array($registration->tier, ['premium', 'vip'])) {
                     $event->certificate_link = null;
                 }
+                
+                // 🔥 PROTEKSI REKAMAN ZOOM BERDASARKAN TIER 🔥
+                if ($event->recording_tier === 'premium' && !in_array($registration->tier, ['premium', 'vip'])) {
+                    $event->recording_link = null;
+                }
+            }
 
+            // Proteksi Modul per item
+            if (in_array($registration->tier, ['free', 'basic']) || $registration->status === 'pending') {
                 $event->materials->transform(function ($material) {
                     if ($material->access_tier === 'premium') {
                         $material->link = null;
@@ -62,7 +75,6 @@ class MyEventController extends Controller
                     return $material;
                 });
             } else {
-                // Jika user adalah Premium / VIP
                 $event->materials->transform(function ($material) {
                     $material->is_locked = false;
                     return $material;
@@ -117,14 +129,12 @@ class MyEventController extends Controller
                  return response()->json(['success' => false, 'message' => 'Autentikasi diperlukan'], 401);
             }
 
-            // 🔥 PERBAIKAN: Menggunakan model Material 🔥
             $material = Material::find($id);
 
             if (!$material || !$material->file_path) {
                 return response()->json(['success' => false, 'message' => 'Modul tidak ditemukan atau bukan berupa file fisik'], 404);
             }
             
-            // --- Proteksi Akses ---
             $registration = Registration::where('user_id', $user->id)
                 ->where('event_id', $material->event_id)
                 ->whereIn('status', ['pending', 'verified'])
@@ -138,7 +148,6 @@ class MyEventController extends Controller
                  return response()->json(['success' => false, 'message' => 'Materi ini eksklusif untuk member Premium/VIP.'], 403);
             }
 
-            // Mengecek file fisik
             if (!Storage::disk('public')->exists($material->file_path)) {
                 return response()->json(['success' => false, 'message' => 'Maaf, file fisik modul belum diunggah atau hilang dari server.'], 404);
             }
@@ -150,7 +159,6 @@ class MyEventController extends Controller
             return Storage::disk('public')->download($material->file_path, $downloadName);
 
         } catch (\Exception $e) {
-            // 🔥 PERBAIKAN: Menangkap error agar tidak mengembalikan halaman HTML Whoops ke React 🔥
             Log::error("Download Material Error: " . $e->getMessage());
             return response()->json(['success' => false, 'message' => 'Sistem gagal mengunduh modul: ' . $e->getMessage()], 500);
         }

@@ -21,12 +21,18 @@ class Event extends Model
         'quota', 
         'basic_price',
         'premium_price', 
+        
         'certificate_link', 
         'certificate_tier',
+        
+        // 🔥 TAMBAHAN BARU: REKAMAN ZOOM 🔥
+        'recording_link',
+        'recording_tier',
+        
         'image',
-        'user_id', // 🔥 DITAMBAHKAN: Agar ID Organizer bisa disimpan saat create event
-        'join_link',         // 🔥 TAMBAHAN BARU: Link Zoom/Gmeet
-        'join_instructions', // 🔥 TAMBAHAN BARU: Instruksi/Password meeting
+        'user_id', 
+        'join_link',         
+        'join_instructions', 
     ];
 
     protected $casts = [
