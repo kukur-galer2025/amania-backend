@@ -13,8 +13,6 @@ use App\Http\Controllers\Api\LeaderboardController;
 use App\Http\Controllers\Api\NotificationController; 
 use App\Http\Controllers\Api\GlobalSearchController; 
 use App\Http\Controllers\Api\EProductController;
-
-// 🔥 IMPORT MY EVENT CONTROLLER (JANGAN DIHAPUS AGAR RUANG KELAS AMAN) 🔥
 use App\Http\Controllers\Api\MyEventController;
 
 // --- 2. Import Checkout Controllers ---
@@ -37,6 +35,7 @@ use App\Http\Controllers\Api\Admin\NotificationController as AdminNotification;
 use App\Http\Controllers\Api\Admin\EProductController as AdminEProduct;
 use App\Http\Controllers\Api\Admin\EProductCategoryController as AdminEProductCategory;
 use App\Http\Controllers\Api\Admin\ImageUploadController;
+use App\Http\Controllers\Api\Admin\EProductTransactionController as AdminEProductTransaction;
 
 /*
 |--------------------------------------------------------------------------
@@ -123,6 +122,10 @@ Route::middleware(['auth:sanctum', 'role:superadmin|organizer'])
     Route::post('/registrations/{id}/verify', [AdminReg::class, 'verify']);
     Route::post('/registrations/{id}/reject', [AdminReg::class, 'reject']); 
     Route::post('/registrations/{id}/pending', [AdminReg::class, 'markAsPending']); 
+    
+    // 🔥 UBAH TIPE TIKET MANUAL (UPGRADE/DOWNGRADE) 🔥
+    Route::put('/registrations/{id}/tier', [AdminReg::class, 'changeTier']);
+
     Route::get('/transactions', [AdminTransaction::class, 'index']);
     Route::get('/tickets', [AdminTicket::class, 'index']);
     Route::post('/tickets/scan', [AdminTicket::class, 'check']);
@@ -169,4 +172,9 @@ Route::middleware(['auth:sanctum', 'role:superadmin'])
     Route::post('/e-products', [AdminEProduct::class, 'store']);
     Route::post('/e-products/{id}', [AdminEProduct::class, 'update']); 
     Route::delete('/e-products/{id}', [AdminEProduct::class, 'destroy']);
+
+    // 🔥 TRANSAKSI E-PRODUK (HANYA SUPERADMIN) 🔥
+    Route::get('/e-product-transactions', [AdminEProductTransaction::class, 'index']);
+    Route::post('/e-product-transactions/{id}/mark-paid', [AdminEProductTransaction::class, 'markAsPaid']);
+    Route::get('/e-product-transactions/export', [AdminEProductTransaction::class, 'exportPdf']); // 🔥 RUTE EXPORT DITAMBAHKAN
 });
