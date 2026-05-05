@@ -11,15 +11,11 @@ use Illuminate\Support\Facades\DB;
 
 class EventController extends Controller
 {
-    /**
-     * MENAMPILKAN DAFTAR EVENT
-     */
     public function index(Request $request)
     {
         $currentUser = $request->user();
         $query = Event::with('bankAccounts');
 
-        // 🔥 LOGIKA MULTI-TENANT: ORGANIZER HANYA LIHAT EVENT MILIKNYA 🔥
         if ($currentUser->role === 'organizer') {
             $query->where('user_id', $currentUser->id);
         }
@@ -33,7 +29,6 @@ class EventController extends Controller
         $currentUser = $request->user();
         $event = Event::with(['materials', 'speakers', 'bankAccounts'])->findOrFail($id);
 
-        // PROTEKSI
         if ($currentUser->role === 'organizer' && $event->user_id !== $currentUser->id) {
             return response()->json(['success' => false, 'message' => 'Akses ditolak'], 403);
         }
@@ -41,9 +36,6 @@ class EventController extends Controller
         return response()->json(['success' => true, 'data' => $event]);
     }
 
-    /**
-     * MEMBUAT EVENT BARU
-     */
     public function store(Request $request)
     {
         $validated = $request->validate([
@@ -56,10 +48,11 @@ class EventController extends Controller
             'basic_price' => 'required|integer',
             'premium_price' => 'nullable|integer',
             
+            'use_qris' => 'required|boolean', 
+            
             'certificate_link' => 'nullable|url',
             'certificate_tier' => 'required|in:all,premium',
             
-            // 🔥 TAMBAHAN BARU: REKAMAN ZOOM 🔥
             'recording_link' => 'nullable|url',
             'recording_tier' => 'required|in:all,premium',
             
@@ -82,9 +75,12 @@ class EventController extends Controller
             $validated['slug'] = Str::slug($request->title) . '-' . uniqid();
             $validated['user_id'] = $request->user()->id; 
             
+            // Konversi tegas agar string "1" / "0" dari FormData menjadi Boolean
+            $validated['use_qris'] = filter_var($request->use_qris, FILTER_VALIDATE_BOOLEAN);
+            
             $event = Event::create($validated);
 
-            if ($request->has('banks') && count($request->banks) > 0) {
+            if ($request->has('banks') && is_array($request->banks) && count($request->banks) > 0) {
                 $event->bankAccounts()->createMany($request->banks);
             }
 
@@ -96,15 +92,11 @@ class EventController extends Controller
         });
     }
 
-    /**
-     * UPDATE EVENT
-     */
     public function update(Request $request, $id)
     {
         $currentUser = $request->user();
         $event = Event::findOrFail($id);
 
-        // PROTEKSI
         if ($currentUser->role === 'organizer' && $event->user_id !== $currentUser->id) {
             return response()->json(['success' => false, 'message' => 'Akses ditolak'], 403);
         }
@@ -119,10 +111,11 @@ class EventController extends Controller
             'basic_price' => 'required|integer', 
             'premium_price' => 'nullable|integer',
             
+            'use_qris' => 'required|boolean', 
+            
             'certificate_link' => 'nullable|url',
             'certificate_tier' => 'required|in:all,premium',
             
-            // 🔥 TAMBAHAN BARU: REKAMAN ZOOM 🔥
             'recording_link' => 'nullable|url',
             'recording_tier' => 'required|in:all,premium',
             
@@ -148,14 +141,18 @@ class EventController extends Controller
             if ($request->title !== $event->title) {
                 $validated['slug'] = Str::slug($request->title) . '-' . uniqid();
             }
+            
+            // Konversi tegas agar string "1" / "0" dari FormData menjadi Boolean
+            $validated['use_qris'] = filter_var($request->use_qris, FILTER_VALIDATE_BOOLEAN);
 
             $event->update($validated);
 
-            if ($request->has('banks')) {
-                $event->bankAccounts()->delete();
-                if (count($request->banks) > 0) {
-                    $event->bankAccounts()->createMany($request->banks);
-                }
+            // Selalu hapus rekening lama, tanpa memandang request bawa array bank atau tidak
+            $event->bankAccounts()->delete();
+            
+            // Simpan bank baru jika ada
+            if ($request->has('banks') && is_array($request->banks) && count($request->banks) > 0) {
+                $event->bankAccounts()->createMany($request->banks);
             }
 
             return response()->json([
@@ -166,15 +163,11 @@ class EventController extends Controller
         });
     }
 
-    /**
-     * HAPUS EVENT
-     */
     public function destroy(Request $request, $id)
     {
         $currentUser = $request->user();
         $event = Event::findOrFail($id);
         
-        // PROTEKSI
         if ($currentUser->role === 'organizer' && $event->user_id !== $currentUser->id) {
             return response()->json(['success' => false, 'message' => 'Akses ditolak'], 403);
         }

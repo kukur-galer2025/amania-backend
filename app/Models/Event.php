@@ -22,10 +22,12 @@ class Event extends Model
         'basic_price',
         'premium_price', 
         
+        // 🔥 TAMBAHAN BARU: QRIS 🔥
+        'use_qris', 
+        
         'certificate_link', 
         'certificate_tier',
         
-        // 🔥 TAMBAHAN BARU: REKAMAN ZOOM 🔥
         'recording_link',
         'recording_tier',
         
@@ -40,6 +42,7 @@ class Event extends Model
         'end_time' => 'datetime',
         'basic_price' => 'integer',
         'premium_price' => 'integer',
+        'use_qris' => 'boolean', // 🔥 PASTIKAN DI-CAST SEBAGAI BOOLEAN 🔥
     ];
 
     /**
