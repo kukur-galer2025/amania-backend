@@ -36,6 +36,9 @@ class EventController extends Controller
         return response()->json(['success' => true, 'data' => $event]);
     }
 
+    /**
+     * MEMBUAT EVENT BARU (Hanya Draft Awal)
+     */
     public function store(Request $request)
     {
         $validated = $request->validate([
@@ -48,7 +51,8 @@ class EventController extends Controller
             'basic_price' => 'required|integer',
             'premium_price' => 'nullable|integer',
             
-            'use_qris' => 'required|boolean', 
+            // 🔥 PERBAIKAN: Ubah jadi nullable karena di form "Buat" tidak ada opsi QRIS 🔥
+            'use_qris' => 'nullable|boolean', 
             
             'certificate_link' => 'nullable|url',
             'certificate_tier' => 'required|in:all,premium',
@@ -75,8 +79,8 @@ class EventController extends Controller
             $validated['slug'] = Str::slug($request->title) . '-' . uniqid();
             $validated['user_id'] = $request->user()->id; 
             
-            // Konversi tegas agar string "1" / "0" dari FormData menjadi Boolean
-            $validated['use_qris'] = filter_var($request->use_qris, FILTER_VALIDATE_BOOLEAN);
+            // 🔥 PERBAIKAN: Beri nilai default 'false' jika data use_qris tidak dikirim dari frontend 🔥
+            $validated['use_qris'] = $request->has('use_qris') ? filter_var($request->use_qris, FILTER_VALIDATE_BOOLEAN) : false;
             
             $event = Event::create($validated);
 
@@ -92,6 +96,9 @@ class EventController extends Controller
         });
     }
 
+    /**
+     * UPDATE EVENT (Halaman Edit Lengkap)
+     */
     public function update(Request $request, $id)
     {
         $currentUser = $request->user();
@@ -111,6 +118,7 @@ class EventController extends Controller
             'basic_price' => 'required|integer', 
             'premium_price' => 'nullable|integer',
             
+            // 🔥 Di halaman Edit, QRIS wajib dikirim (bisa 0 atau 1) 🔥
             'use_qris' => 'required|boolean', 
             
             'certificate_link' => 'nullable|url',
@@ -142,15 +150,12 @@ class EventController extends Controller
                 $validated['slug'] = Str::slug($request->title) . '-' . uniqid();
             }
             
-            // Konversi tegas agar string "1" / "0" dari FormData menjadi Boolean
             $validated['use_qris'] = filter_var($request->use_qris, FILTER_VALIDATE_BOOLEAN);
 
             $event->update($validated);
 
-            // Selalu hapus rekening lama, tanpa memandang request bawa array bank atau tidak
             $event->bankAccounts()->delete();
             
-            // Simpan bank baru jika ada
             if ($request->has('banks') && is_array($request->banks) && count($request->banks) > 0) {
                 $event->bankAccounts()->createMany($request->banks);
             }
