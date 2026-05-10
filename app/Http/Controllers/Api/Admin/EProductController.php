@@ -25,7 +25,8 @@ class EProductController extends Controller
      */
     public function show($id)
     {
-        $product = EProduct::with('category')->findOrFail($id);
+        // 🔥 PERBAIKAN: Tambahkan relasi 'materials' agar bisa ditampilkan di Frontend
+        $product = EProduct::with(['category', 'materials'])->findOrFail($id);
         return response()->json(['success' => true, 'data' => $product]);
     }
 
@@ -40,13 +41,10 @@ class EProductController extends Controller
             'description' => 'required|string',
             'price' => 'required|integer|min:0',
             'cover_image' => 'nullable|image|mimes:jpeg,png,jpg,webp|max:10240', // Maks 10MB
-            // Wajib pilih salah satu: file upload ATAU link gdrive
-            'file_upload' => 'required_without:file_link|nullable|file|mimes:pdf,zip,rar|max:51200', // Maks 50MB
-            'file_link'   => 'required_without:file_upload|nullable|string|url', 
+            // 🔥 VALIDASI FILE_UPLOAD & FILE_LINK SUDAH DIHAPUS DARI SINI 🔥
             'is_published' => 'required|boolean'
         ]);
 
-        // 🔥 PERBAIKAN: Masukkan e_product_category_id agar ikut tersimpan
         $data = $request->only(['title', 'e_product_category_id', 'description', 'price', 'is_published']);
         $data['slug'] = Str::slug($request->title) . '-' . uniqid();
         $data['user_id'] = $request->user()->id; 
@@ -56,12 +54,7 @@ class EProductController extends Controller
             $data['cover_image'] = $request->file('cover_image')->store('e_products/covers', 'public');
         }
 
-        // Eksekusi Tipe File Asli
-        if ($request->hasFile('file_upload')) {
-            $data['file_path'] = $request->file('file_upload')->store('e_products/files', 'public');
-        } elseif ($request->filled('file_link')) {
-            $data['file_path'] = $request->file_link;
-        }
+        // 🔥 LOGIKA UNTUK MENYIMPAN FILE_PATH SUDAH DIHAPUS 🔥
 
         $product = EProduct::create($data);
 
@@ -85,12 +78,10 @@ class EProductController extends Controller
             'description' => 'required|string',
             'price' => 'required|integer|min:0',
             'cover_image' => 'nullable|image|mimes:jpeg,png,jpg,webp|max:10240', // Maks 10MB
-            'file_upload' => 'nullable|file|mimes:pdf,zip,rar|max:51200', // Maks 50MB
-            'file_link'   => 'nullable|string|url',
+            // 🔥 VALIDASI FILE_UPLOAD & FILE_LINK SUDAH DIHAPUS DARI SINI 🔥
             'is_published' => 'required|boolean'
         ]);
 
-        // 🔥 PERBAIKAN: Masukkan e_product_category_id agar ikut diupdate
         $data = $request->only(['title', 'e_product_category_id', 'description', 'price', 'is_published']);
         
         if ($request->title !== $product->title) {
@@ -106,20 +97,7 @@ class EProductController extends Controller
             $data['cover_image'] = $request->file('cover_image')->store('e_products/covers', 'public');
         }
 
-        // Update File Asli
-        if ($request->hasFile('file_upload')) {
-            // Hapus file fisik lama
-            if ($product->file_path && !Str::startsWith($product->file_path, ['http://', 'https://']) && Storage::disk('public')->exists($product->file_path)) {
-                Storage::disk('public')->delete($product->file_path);
-            }
-            $data['file_path'] = $request->file('file_upload')->store('e_products/files', 'public');
-        } elseif ($request->filled('file_link')) {
-            // Jika beralih ke Link, hapus file fisik lama (jika ada)
-            if ($product->file_path && !Str::startsWith($product->file_path, ['http://', 'https://']) && Storage::disk('public')->exists($product->file_path)) {
-                Storage::disk('public')->delete($product->file_path);
-            }
-            $data['file_path'] = $request->file_link;
-        }
+        // 🔥 LOGIKA UNTUK MENGUPDATE FILE_PATH SUDAH DIHAPUS 🔥
 
         $product->update($data);
 
@@ -137,18 +115,23 @@ class EProductController extends Controller
     {
         $product = EProduct::findOrFail($id);
 
+        // Hapus file cover fisik
         if ($product->cover_image && !Str::startsWith($product->cover_image, ['http://', 'https://']) && Storage::disk('public')->exists($product->cover_image)) {
             Storage::disk('public')->delete($product->cover_image);
         }
-        if ($product->file_path && !Str::startsWith($product->file_path, ['http://', 'https://']) && Storage::disk('public')->exists($product->file_path)) {
-            Storage::disk('public')->delete($product->file_path);
+        
+        // 🔥 HAPUS FILE FISIK DARI MATERI (ZIP/PDF) SEBELUM MENGHAPUS PRODUK 🔥
+        foreach ($product->materials as $mat) {
+            if ($mat->type === 'file' && $mat->file_path && Storage::disk('public')->exists($mat->file_path)) {
+                Storage::disk('public')->delete($mat->file_path);
+            }
         }
 
         $product->delete();
 
         return response()->json([
             'success' => true,
-            'message' => 'E-Produk berhasil dihapus!'
+            'message' => 'E-Produk dan materinya berhasil dihapus!'
         ]);
     }
 }

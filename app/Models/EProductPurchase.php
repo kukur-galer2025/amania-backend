@@ -16,6 +16,7 @@ class EProductPurchase extends Model
         'e_product_id',
         'amount',
         'checkout_url',
+        'payment_method', // 🔥 KOLOM BARU DITAMBAHKAN DI SINI
         'expired_time', 
         'status'
     ];

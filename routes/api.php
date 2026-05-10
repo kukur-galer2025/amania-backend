@@ -37,6 +37,9 @@ use App\Http\Controllers\Api\Admin\EProductCategoryController as AdminEProductCa
 use App\Http\Controllers\Api\Admin\ImageUploadController;
 use App\Http\Controllers\Api\Admin\EProductTransactionController as AdminEProductTransaction;
 
+// 🔥 IMPORT BARU UNTUK MATERI E-PRODUK 🔥
+use App\Http\Controllers\Api\Admin\EProductMaterialController as AdminEProductMaterial;
+
 /*
 |--------------------------------------------------------------------------
 | API Routes - Amania Nusantara Professional
@@ -87,6 +90,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/checkout/e-product', [EProductCheckoutController::class, 'purchaseEProduct']);
     
     Route::get('/my-e-products', [EProductController::class, 'myProducts']);
+    // 🔥 ROUTE BARU: DETAIL E-PRODUK MEMBER (RUANG KELAS / COURSE VIEWER) 🔥
+    Route::get('/my-e-products/{slug}', [EProductController::class, 'myProductDetail']);
+
     Route::post('/e-products/{id}/reviews', [EProductController::class, 'submitReview']);
     
     Route::get('/my-eproduct-transactions', [EProductController::class, 'myTransactions']);
@@ -113,8 +119,10 @@ Route::middleware(['auth:sanctum', 'role:superadmin|organizer'])
     Route::post('/events', [AdminEvent::class, 'store']);
     Route::post('/events/{id}', [AdminEvent::class, 'update']); 
     Route::delete('/events/{id}', [AdminEvent::class, 'destroy']);
+    
     Route::post('/materials', [AdminMaterial::class, 'store']);
     Route::delete('/materials/{id}', [AdminMaterial::class, 'destroy']);
+    
     Route::post('/speakers', [AdminSpeaker::class, 'store']); 
     Route::delete('/speakers/{id}', [AdminSpeaker::class, 'destroy']);
 
@@ -173,8 +181,12 @@ Route::middleware(['auth:sanctum', 'role:superadmin'])
     Route::post('/e-products/{id}', [AdminEProduct::class, 'update']); 
     Route::delete('/e-products/{id}', [AdminEProduct::class, 'destroy']);
 
+    // 🔥 RUTING BARU UNTUK MULTI MATERI E-PRODUK 🔥
+    Route::post('/e-product-materials', [AdminEProductMaterial::class, 'store']);
+    Route::delete('/e-product-materials/{id}', [AdminEProductMaterial::class, 'destroy']);
+
     // 🔥 TRANSAKSI E-PRODUK (HANYA SUPERADMIN) 🔥
     Route::get('/e-product-transactions', [AdminEProductTransaction::class, 'index']);
     Route::post('/e-product-transactions/{id}/mark-paid', [AdminEProductTransaction::class, 'markAsPaid']);
-    Route::get('/e-product-transactions/export', [AdminEProductTransaction::class, 'exportPdf']); // 🔥 RUTE EXPORT DITAMBAHKAN
+    Route::get('/e-product-transactions/export', [AdminEProductTransaction::class, 'exportPdf']); 
 });

@@ -26,7 +26,7 @@ class EProductController extends Controller
 
         if ($user) {
             $purchasedProductIds = EProductPurchase::where('user_id', $user->id)
-                ->whereIn('status', ['PAID', 'success'])
+                ->whereIn('status', ['PAID', 'success', 'SETTLED']) // Ditambah SETTLED
                 ->pluck('e_product_id')
                 ->toArray();
 
@@ -55,6 +55,7 @@ class EProductController extends Controller
         $product = EProduct::where('slug', $slug)
             ->where('is_published', true)
             ->with(['author:id,name', 'reviews.user:id,name,avatar', 'category:id,name'])
+            ->withCount('materials') // Hitung jumlah file/materi yang ada
             ->withAvg('reviews', 'rating')
             ->withCount('reviews')
             ->first();
@@ -67,7 +68,7 @@ class EProductController extends Controller
         if ($user) {
             $isPurchased = EProductPurchase::where('user_id', $user->id)
                 ->where('e_product_id', $product->id)
-                ->whereIn('status', ['PAID', 'success'])
+                ->whereIn('status', ['PAID', 'success', 'SETTLED'])
                 ->exists();
             $product->is_purchased = $isPurchased;
         } else {
@@ -94,7 +95,7 @@ class EProductController extends Controller
 
         $hasPurchased = EProductPurchase::where('user_id', $user->id)
             ->where('e_product_id', $id)
-            ->whereIn('status', ['PAID', 'success'])
+            ->whereIn('status', ['PAID', 'success', 'SETTLED'])
             ->exists();
 
         if (!$hasPurchased) {
@@ -128,9 +129,13 @@ class EProductController extends Controller
      */
     public function myProducts(Request $request)
     {
-        $purchases = EProductPurchase::with(['product', 'product.author:id,name', 'product.category:id,name'])
+        $purchases = EProductPurchase::with([
+            'product.category:id,name',
+            'product.author:id,name', 
+            'product.materials' // Load materi agar bisa diakses oleh Member
+        ])
             ->where('user_id', $request->user()->id)
-            ->whereIn('status', ['PAID', 'success'])
+            ->whereIn('status', ['PAID', 'success', 'SETTLED'])
             ->latest()
             ->get();
 
@@ -154,6 +159,36 @@ class EProductController extends Controller
         return response()->json([
             'success' => true,
             'data' => $transactions
+        ]);
+    }
+
+    /**
+     * 🔥 DETAIL E-PRODUK MEMBER (RUANG KELAS / COURSE VIEWER) 🔥
+     * API baru untuk halaman /my-e-products/[slug]
+     */
+    public function myProductDetail(Request $request, $slug)
+    {
+        // Cari data transaksi user yang statusnya lunas untuk slug produk ini
+        $purchase = EProductPurchase::with([
+            'product.category:id,name',
+            'product.author:id,name',
+            'product.materials' // Load semua materi
+        ])
+        ->where('user_id', $request->user()->id)
+        ->whereIn('status', ['PAID', 'success', 'SETTLED'])
+        ->whereHas('product', function ($query) use ($slug) {
+            $query->where('slug', $slug);
+        })
+        ->first();
+
+        // Jika tidak ketemu atau belum beli, tolak akses
+        if (!$purchase || !$purchase->product) {
+            return response()->json(['success' => false, 'message' => 'Akses ditolak. Anda belum memiliki produk ini.'], 403);
+        }
+
+        return response()->json([
+            'success' => true,
+            'data' => $purchase->product
         ]);
     }
 }

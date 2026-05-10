@@ -84,10 +84,7 @@ class EProductCheckoutController extends Controller
             return response()->json(['success' => false, 'message' => 'Anda sudah memiliki akses ke produk digital ini.']);
         }
 
-        // 🔥 IDE ANDA DITERAPKAN DI SINI 🔥
-        // Kita TIDAK LAGI membatalkan invoice lama menjadi EXPIRED. 
-        // Biarkan user membuat banyak invoice UNPAID (Misal: 1 QRIS, 1 VA BCA).
-
+        // Kita biarkan user membuat banyak invoice UNPAID
         $merchantRef = 'INV-EP-' . strtoupper(Str::random(8)) . '-' . $user->id;
         $amount = (int) $product->price;
 
@@ -166,6 +163,7 @@ class EProductCheckoutController extends Controller
                     'amount'           => $amount,
                     'checkout_url'     => $result['data']['checkout_url'],
                     'expired_time'     => $result['data']['expired_time'] ?? null,
+                    'payment_method'   => $request->input('method'), // 🔥 SIMPAN METODE PEMBAYARAN SAAT CREATE 🔥
                     'status'           => 'UNPAID', // Status awal selalu UNPAID
                 ]);
                 
@@ -228,11 +226,17 @@ class EProductCheckoutController extends Controller
                     return response()->json(['success' => false, 'message' => 'Purchase not found'], 404);
                 }
 
-                // 🔥 IDE ANDA DITERAPKAN DI SINI (DI DALAM WEBHOOK) 🔥
                 if (in_array($status, ['PAID', 'SETTLED'])) {
                     
                     // 1. LUNASKAN TAGIHAN INI
-                    $purchase->update(['status' => 'PAID']);
+                    $updateData = ['status' => 'PAID'];
+                    
+                    // 🔥 SIMPAN METODE PEMBAYARAN DARI TRIPAY JIKA ADA PERUBAHAN 🔥
+                    if (isset($data->payment_method)) {
+                        $updateData['payment_method'] = $data->payment_method;
+                    }
+                    
+                    $purchase->update($updateData);
 
                     // 2. EXPIRED-KAN SEMUA TAGIHAN UNPAID LAINNYA UNTUK USER & PRODUK YANG SAMA
                     EProductPurchase::where('user_id', $purchase->user_id)
