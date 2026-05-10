@@ -90,8 +90,12 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/checkout/e-product', [EProductCheckoutController::class, 'purchaseEProduct']);
     
     Route::get('/my-e-products', [EProductController::class, 'myProducts']);
+    
     // 🔥 ROUTE BARU: DETAIL E-PRODUK MEMBER (RUANG KELAS / COURSE VIEWER) 🔥
     Route::get('/my-e-products/{slug}', [EProductController::class, 'myProductDetail']);
+    
+    // 🔥 ROUTE BARU: DOWNLOAD MATERI E-PRODUK SECARA PAKSA 🔥
+    Route::get('/my-e-products/materials/{id}/download', [EProductController::class, 'downloadMaterial']);
 
     Route::post('/e-products/{id}/reviews', [EProductController::class, 'submitReview']);
     

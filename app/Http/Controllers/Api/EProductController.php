@@ -10,9 +10,6 @@ use Illuminate\Http\Request;
 
 class EProductController extends Controller
 {
-    /**
-     * 🔥 TAMPILKAN SEMUA E-PRODUK DI KATALOG (PUBLIK & MEMBER) 🔥
-     */
     public function index(Request $request)
     {
         $query = EProduct::where('is_published', true)
@@ -26,7 +23,7 @@ class EProductController extends Controller
 
         if ($user) {
             $purchasedProductIds = EProductPurchase::where('user_id', $user->id)
-                ->whereIn('status', ['PAID', 'success', 'SETTLED']) // Ditambah SETTLED
+                ->whereIn('status', ['PAID', 'success', 'SETTLED'])
                 ->pluck('e_product_id')
                 ->toArray();
 
@@ -47,15 +44,12 @@ class EProductController extends Controller
         ]);
     }
 
-    /**
-     * 🔥 DETAIL E-PRODUK (PUBLIK) 🔥
-     */
     public function show($slug)
     {
         $product = EProduct::where('slug', $slug)
             ->where('is_published', true)
             ->with(['author:id,name', 'reviews.user:id,name,avatar', 'category:id,name'])
-            ->withCount('materials') // Hitung jumlah file/materi yang ada
+            ->withCount('materials')
             ->withAvg('reviews', 'rating')
             ->withCount('reviews')
             ->first();
@@ -81,9 +75,6 @@ class EProductController extends Controller
         ]);
     }
 
-    /**
-     * 🔥 SUBMIT ULASAN (KHUSUS MEMBER YANG SUDAH BELI) 🔥
-     */
     public function submitReview(Request $request, $id)
     {
         $request->validate([
@@ -123,16 +114,12 @@ class EProductController extends Controller
         ]);
     }
 
-    /**
-     * 🔥 MENGAMBIL E-PRODUK YANG SUDAH DIBELI USER (LUNAS) 🔥
-     * Digunakan untuk halaman koleksi belajar
-     */
     public function myProducts(Request $request)
     {
         $purchases = EProductPurchase::with([
             'product.category:id,name',
             'product.author:id,name', 
-            'product.materials' // Load materi agar bisa diakses oleh Member
+            'product.materials'
         ])
             ->where('user_id', $request->user()->id)
             ->whereIn('status', ['PAID', 'success', 'SETTLED'])
@@ -145,10 +132,6 @@ class EProductController extends Controller
         ]);
     }
 
-    /**
-     * 🔥 MENGAMBIL SEMUA RIWAYAT TRANSAKSI E-PRODUK (PAID & UNPAID) 🔥
-     * Digunakan untuk halaman Riwayat Transaksi agar user bisa lanjut bayar
-     */
     public function myTransactions(Request $request)
     {
         $transactions = EProductPurchase::with(['product', 'product.author:id,name', 'product.category:id,name'])
@@ -162,17 +145,12 @@ class EProductController extends Controller
         ]);
     }
 
-    /**
-     * 🔥 DETAIL E-PRODUK MEMBER (RUANG KELAS / COURSE VIEWER) 🔥
-     * API baru untuk halaman /my-e-products/[slug]
-     */
     public function myProductDetail(Request $request, $slug)
     {
-        // Cari data transaksi user yang statusnya lunas untuk slug produk ini
         $purchase = EProductPurchase::with([
             'product.category:id,name',
             'product.author:id,name',
-            'product.materials' // Load semua materi
+            'product.materials'
         ])
         ->where('user_id', $request->user()->id)
         ->whereIn('status', ['PAID', 'success', 'SETTLED'])
@@ -181,7 +159,6 @@ class EProductController extends Controller
         })
         ->first();
 
-        // Jika tidak ketemu atau belum beli, tolak akses
         if (!$purchase || !$purchase->product) {
             return response()->json(['success' => false, 'message' => 'Akses ditolak. Anda belum memiliki produk ini.'], 403);
         }
@@ -190,5 +167,31 @@ class EProductController extends Controller
             'success' => true,
             'data' => $purchase->product
         ]);
+    }
+
+    /**
+     * 🔥 UNDUH MATERI (FORCE DOWNLOAD) 🔥
+     */
+    public function downloadMaterial(Request $request, $id)
+    {
+        $material = \App\Models\EProductMaterial::findOrFail($id);
+
+        $hasPurchased = EProductPurchase::where('user_id', $request->user()->id)
+            ->where('e_product_id', $material->e_product_id)
+            ->whereIn('status', ['PAID', 'success', 'SETTLED'])
+            ->exists();
+
+        if (!$hasPurchased) {
+            return response()->json(['success' => false, 'message' => 'Akses ditolak. Anda belum memiliki akses ke materi ini.'], 403);
+        }
+
+        // Pastikan Anda memanggil path file yang sesuai dengan tempat penyimpanannya.
+        $filePath = storage_path('app/public/' . $material->file_path);
+
+        if (!file_exists($filePath)) {
+            return response()->json(['success' => false, 'message' => 'File tidak ditemukan di server.'], 404);
+        }
+
+        return response()->download($filePath, $material->title . '.' . pathinfo($filePath, PATHINFO_EXTENSION));
     }
 }
