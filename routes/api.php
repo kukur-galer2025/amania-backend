@@ -15,8 +15,9 @@ use App\Http\Controllers\Api\GlobalSearchController;
 use App\Http\Controllers\Api\EProductController;
 use App\Http\Controllers\Api\MyEventController;
 
-// --- 2. Import Checkout Controllers ---
+// --- 2. Import Checkout & Cart Controllers ---
 use App\Http\Controllers\Api\EProductCheckoutController;
+use App\Http\Controllers\Api\CartController; // 🔥 IMPORT CART CONTROLLER 🔥
 
 // --- 3. Import Admin Controllers ---
 use App\Http\Controllers\Api\Admin\EventController as AdminEvent;
@@ -36,8 +37,6 @@ use App\Http\Controllers\Api\Admin\EProductController as AdminEProduct;
 use App\Http\Controllers\Api\Admin\EProductCategoryController as AdminEProductCategory;
 use App\Http\Controllers\Api\Admin\ImageUploadController;
 use App\Http\Controllers\Api\Admin\EProductTransactionController as AdminEProductTransaction;
-
-// 🔥 IMPORT BARU UNTUK MATERI E-PRODUK 🔥
 use App\Http\Controllers\Api\Admin\EProductMaterialController as AdminEProductMaterial;
 
 /*
@@ -86,27 +85,26 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/notifications', [NotificationController::class, 'index']);
     Route::post('/notifications/read', [NotificationController::class, 'markAllAsRead']);
     
+    // 🔥 API KERANJANG BELANJA (CART) 🔥
+    Route::get('/cart', [CartController::class, 'index']);
+    Route::post('/cart', [CartController::class, 'store']);
+    Route::delete('/cart/{id}', [CartController::class, 'destroy']); // 🔥 RUTE DELETE DITAMBAHKAN 🔥
+
     Route::get('/checkout/payment-channels', [EProductCheckoutController::class, 'getPaymentChannels']);
     Route::post('/checkout/e-product', [EProductCheckoutController::class, 'purchaseEProduct']);
     
     Route::get('/my-e-products', [EProductController::class, 'myProducts']);
-    
-    // 🔥 ROUTE BARU: DETAIL E-PRODUK MEMBER (RUANG KELAS / COURSE VIEWER) 🔥
     Route::get('/my-e-products/{slug}', [EProductController::class, 'myProductDetail']);
-    
-    // 🔥 ROUTE BARU: DOWNLOAD MATERI E-PRODUK SECARA PAKSA 🔥
     Route::get('/my-e-products/materials/{id}/download', [EProductController::class, 'downloadMaterial']);
 
     Route::post('/e-products/{id}/reviews', [EProductController::class, 'submitReview']);
     
     Route::get('/my-eproduct-transactions', [EProductController::class, 'myTransactions']);
 
-    // 🔥 API KHUSUS MY EVENT (RUANG KELAS PRIVAT) 🔥
     Route::get('/my-events/{slug}', [MyEventController::class, 'show']);
     Route::get('/my-events/{slug}/download-poster', [MyEventController::class, 'downloadPoster']);
     Route::get('/my-events/materials/{id}/download', [MyEventController::class, 'downloadMaterial']);
 });
-
 
 // =========================================================================
 // SECTION 3A: RUTE MULTI-TENANT (Superadmin | Organizer)
@@ -135,7 +133,6 @@ Route::middleware(['auth:sanctum', 'role:superadmin|organizer'])
     Route::post('/registrations/{id}/reject', [AdminReg::class, 'reject']); 
     Route::post('/registrations/{id}/pending', [AdminReg::class, 'markAsPending']); 
     
-    // 🔥 UBAH TIPE TIKET MANUAL (UPGRADE/DOWNGRADE) 🔥
     Route::put('/registrations/{id}/tier', [AdminReg::class, 'changeTier']);
 
     Route::get('/transactions', [AdminTransaction::class, 'index']);
@@ -155,7 +152,6 @@ Route::middleware(['auth:sanctum', 'role:superadmin|organizer'])
     Route::get('/notifications', [AdminNotification::class, 'index']);
     Route::post('/notifications/read', [AdminNotification::class, 'markAllAsRead']);
 });
-
 
 // =========================================================================
 // SECTION 3B: RUTE EKSKLUSIF SUPERADMIN
@@ -185,11 +181,9 @@ Route::middleware(['auth:sanctum', 'role:superadmin'])
     Route::post('/e-products/{id}', [AdminEProduct::class, 'update']); 
     Route::delete('/e-products/{id}', [AdminEProduct::class, 'destroy']);
 
-    // 🔥 RUTING BARU UNTUK MULTI MATERI E-PRODUK 🔥
     Route::post('/e-product-materials', [AdminEProductMaterial::class, 'store']);
     Route::delete('/e-product-materials/{id}', [AdminEProductMaterial::class, 'destroy']);
 
-    // 🔥 TRANSAKSI E-PRODUK (HANYA SUPERADMIN) 🔥
     Route::get('/e-product-transactions', [AdminEProductTransaction::class, 'index']);
     Route::post('/e-product-transactions/{id}/mark-paid', [AdminEProductTransaction::class, 'markAsPaid']);
     Route::get('/e-product-transactions/export', [AdminEProductTransaction::class, 'exportPdf']); 

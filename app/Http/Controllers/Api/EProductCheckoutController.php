@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\EProduct;
 use App\Models\EProductPurchase;
+use App\Models\EProductOrderItem;
+use App\Models\Cart;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -62,43 +64,111 @@ class EProductCheckoutController extends Controller
     }
 
     // =========================================================================
-    // 2. FUNGSI CHECKOUT E-PRODUCT (TRIPAY CLOSED PAYMENT)
+    // 2. FUNGSI CHECKOUT (DUKUNG "BELI LANGSUNG" & "CHECKOUT KERANJANG")
     // =========================================================================
     public function purchaseEProduct(Request $request)
     {
         $request->validate([
-            'e_product_id' => 'required|exists:e_products,id',
             'method'       => 'required|string', 
+            'e_product_id' => 'nullable|exists:e_products,id' 
         ]);
 
-        $user    = $request->user();
-        $product = EProduct::where('is_published', true)->findOrFail($request->e_product_id);
+        $user = $request->user();
+        $isDirectBuy = $request->has('e_product_id') && !empty($request->e_product_id);
 
-        // 1. CEK STATUS LUNAS: Pencegahan ganda jika user sudah bayar.
-        $alreadyBought = EProductPurchase::where('user_id', $user->id)
-            ->where('e_product_id', $product->id)
-            ->whereIn('status', ['PAID', 'success', 'SETTLED'])
-            ->exists();
+        $totalAmount = 0;
+        $orderItemsPayload = [];
+        $itemsToSave = []; 
 
-        if ($alreadyBought) {
-            return response()->json(['success' => false, 'message' => 'Anda sudah memiliki akses ke produk digital ini.']);
+        // ---------------------------------------------------------
+        // SKENARIO A: BELI LANGSUNG (Direct Buy)
+        // ---------------------------------------------------------
+        if ($isDirectBuy) {
+            $product = EProduct::where('is_published', true)->findOrFail($request->e_product_id);
+
+            // 🔥 HANYA CEK TABEL ORDER ITEMS (SIAP APRIORI) 🔥
+            $alreadyBought = EProductPurchase::where('user_id', $user->id)
+                ->whereHas('items', function($q) use ($product) {
+                    $q->where('e_product_id', $product->id);
+                })->whereIn('status', ['PAID', 'success', 'SETTLED'])->exists();
+
+            if ($alreadyBought) {
+                return response()->json(['success' => false, 'message' => 'Anda sudah memiliki akses ke produk ini.']);
+            }
+
+            $totalAmount = (int) $product->price;
+            $orderItemsPayload[] = [
+                'sku'      => 'EP-' . $product->id,
+                'name'     => substr($product->title, 0, 50),
+                'price'    => (int) $product->price,
+                'quantity' => 1,
+            ];
+            $itemsToSave[] = ['id' => $product->id, 'price' => $product->price];
+        } 
+        // ---------------------------------------------------------
+        // SKENARIO B: CHECKOUT DARI KERANJANG (Cart Checkout)
+        // ---------------------------------------------------------
+        else {
+            $carts = Cart::where('user_id', $user->id)->with('product')->get();
+            
+            if ($carts->isEmpty()) {
+                return response()->json(['success' => false, 'message' => 'Keranjang belanja Anda kosong.']);
+            }
+
+            foreach ($carts as $cart) {
+                // 🔥 HANYA CEK TABEL ORDER ITEMS (SIAP APRIORI) 🔥
+                $alreadyBought = EProductPurchase::where('user_id', $user->id)
+                    ->whereHas('items', function($q) use ($cart) {
+                        $q->where('e_product_id', $cart->e_product_id);
+                    })->whereIn('status', ['PAID', 'success', 'SETTLED'])->exists();
+
+                if ($alreadyBought) {
+                    return response()->json([
+                        'success' => false, 
+                        'message' => 'Produk "'.$cart->product->title.'" sudah Anda miliki. Silakan hapus dari keranjang.'
+                    ], 400);
+                }
+
+                $totalAmount += (int) $cart->product->price;
+                $orderItemsPayload[] = [
+                    'sku'      => 'EP-' . $cart->product->id,
+                    'name'     => substr($cart->product->title, 0, 50),
+                    'price'    => (int) $cart->product->price,
+                    'quantity' => 1,
+                ];
+                $itemsToSave[] = ['id' => $cart->product->id, 'price' => $cart->product->price];
+            }
         }
 
-        // Kita biarkan user membuat banyak invoice UNPAID
         $merchantRef = 'INV-EP-' . strtoupper(Str::random(8)) . '-' . $user->id;
-        $amount = (int) $product->price;
 
         DB::beginTransaction();
         try {
-            // JIKA GRATIS (BYPASS TRIPAY)
-            if ($amount == 0) {
-                EProductPurchase::create([
-                    'reference'    => $merchantRef, 
-                    'user_id'      => $user->id,
-                    'e_product_id' => $product->id,
-                    'amount'       => 0,
-                    'status'       => 'PAID',
+            // ==========================================
+            // JIKA TOTAL GRATIS (BYPASS TRIPAY)
+            // ==========================================
+            if ($totalAmount == 0) {
+                $purchase = EProductPurchase::create([
+                    'reference'      => $merchantRef, 
+                    'user_id'        => $user->id,
+                    // 'e_product_id' => ... 🔥 BARIS INI SUDAH DIHAPUS PERMANEN
+                    'amount'         => 0,
+                    'payment_method' => 'FREE_CLAIM',
+                    'status'         => 'PAID',
                 ]);
+
+                foreach ($itemsToSave as $item) {
+                    EProductOrderItem::create([
+                        'e_product_purchase_id' => $purchase->id,
+                        'e_product_id'          => $item['id'],
+                        'price'                 => 0
+                    ]);
+                }
+
+                if (!$isDirectBuy) {
+                    Cart::where('user_id', $user->id)->delete();
+                }
+
                 DB::commit();
                 return response()->json([
                     'success'  => true,
@@ -116,33 +186,23 @@ class EProductCheckoutController extends Controller
 
             if (empty($privateKey) || empty($merchantCode) || empty($apiKey)) {
                 DB::rollBack();
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Gagal: Kredensial Tripay belum lengkap di file .env backend.'
-                ], 400);
+                return response()->json(['success' => false, 'message' => 'Gagal: Kredensial Tripay belum lengkap di file .env.'], 400);
             }
 
             $apiUrl = rtrim(env('TRIPAY_URL', 'https://tripay.co.id/api/'), '/') . '/transaction/create';
-            $signature = hash_hmac('sha256', $merchantCode . $merchantRef . $amount, $privateKey);
+            $signature = hash_hmac('sha256', $merchantCode . $merchantRef . $totalAmount, $privateKey);
 
             $payload = [
                 'method'         => $request->input('method'),
                 'merchant_ref'   => $merchantRef,
-                'amount'         => $amount,
+                'amount'         => $totalAmount,
                 'customer_name'  => $user->name ?? 'Member Amania',
                 'customer_email' => $user->email ?? 'email@amania.id',
                 'customer_phone' => $user->phone ?? '08000000000',
-                'order_items'    => [
-                    [
-                        'sku'      => 'EP-' . $product->id,
-                        'name'     => substr($product->title, 0, 50),
-                        'price'    => $amount,
-                        'quantity' => 1,
-                    ]
-                ],
-                'return_url'   => rtrim(env('FRONTEND_URL', 'https://amania.id'), '/') . '/e-products/' . $product->slug,
-                'expired_time' => (time() + (24 * 60 * 60)), // Expired default 24 Jam
-                'signature'    => $signature
+                'order_items'    => $orderItemsPayload,
+                'return_url'     => rtrim(env('FRONTEND_URL', 'https://amania.id'), '/') . '/my-e-products',
+                'expired_time'   => (time() + (24 * 60 * 60)), // Expired default 24 Jam
+                'signature'      => $signature
             ];
 
             // KIRIM REQUEST KE TRIPAY
@@ -155,28 +215,39 @@ class EProductCheckoutController extends Controller
             // JIKA TRIPAY SUKSES, SIMPAN KE DATABASE
             if ($response->successful() && isset($result['success']) && $result['success'] == true) {
                 
-                EProductPurchase::create([
+                $purchase = EProductPurchase::create([
                     'reference'        => $merchantRef, 
                     'tripay_reference' => $result['data']['reference'],
                     'user_id'          => $user->id,
-                    'e_product_id'     => $product->id,
-                    'amount'           => $amount,
+                    // 'e_product_id' => ... 🔥 BARIS INI SUDAH DIHAPUS PERMANEN
+                    'amount'           => $totalAmount,
                     'checkout_url'     => $result['data']['checkout_url'],
                     'expired_time'     => $result['data']['expired_time'] ?? null,
-                    'payment_method'   => $request->input('method'), // 🔥 SIMPAN METODE PEMBAYARAN SAAT CREATE 🔥
-                    'status'           => 'UNPAID', // Status awal selalu UNPAID
+                    'payment_method'   => $request->input('method'), 
+                    'status'           => 'UNPAID',
                 ]);
+
+                foreach ($itemsToSave as $item) {
+                    EProductOrderItem::create([
+                        'e_product_purchase_id' => $purchase->id,
+                        'e_product_id'          => $item['id'],
+                        'price'                 => $item['price']
+                    ]);
+                }
+
+                if (!$isDirectBuy) {
+                    Cart::where('user_id', $user->id)->delete();
+                }
                 
                 DB::commit();
 
                 return response()->json([
                     'success'      => true,
-                    'message'      => 'Silakan lakukan pembayaran.',
+                    'message'      => 'Pesanan berhasil dibuat! Silakan lakukan pembayaran.',
                     'checkout_url' => $result['data']['checkout_url'],
                 ]);
             }
 
-            // Jika Tripay menolak request
             DB::rollBack();
             Log::error('Tripay Create Transaction Error: ', $result ?? []);
             return response()->json([
@@ -228,22 +299,13 @@ class EProductCheckoutController extends Controller
 
                 if (in_array($status, ['PAID', 'SETTLED'])) {
                     
-                    // 1. LUNASKAN TAGIHAN INI
                     $updateData = ['status' => 'PAID'];
                     
-                    // 🔥 SIMPAN METODE PEMBAYARAN DARI TRIPAY JIKA ADA PERUBAHAN 🔥
                     if (isset($data->payment_method)) {
                         $updateData['payment_method'] = $data->payment_method;
                     }
                     
                     $purchase->update($updateData);
-
-                    // 2. EXPIRED-KAN SEMUA TAGIHAN UNPAID LAINNYA UNTUK USER & PRODUK YANG SAMA
-                    EProductPurchase::where('user_id', $purchase->user_id)
-                        ->where('e_product_id', $purchase->e_product_id)
-                        ->where('id', '!=', $purchase->id) // Kecuali tagihan yang baru saja lunas ini
-                        ->where('status', 'UNPAID')
-                        ->update(['status' => 'EXPIRED']);
 
                 } elseif (in_array($status, ['EXPIRED', 'FAILED', 'REFUND'])) {
                     $purchase->update(['status' => 'EXPIRED']);

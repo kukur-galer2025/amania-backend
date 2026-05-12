@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\EProduct;
 use App\Models\EProductPurchase;
+use App\Models\EProductOrderItem; // 🔥 WAJIB DI-IMPORT
 use App\Models\EProductReview;
 use Illuminate\Http\Request;
 
@@ -22,8 +23,11 @@ class EProductController extends Controller
         $user = auth('sanctum')->user();
 
         if ($user) {
-            $purchasedProductIds = EProductPurchase::where('user_id', $user->id)
-                ->whereIn('status', ['PAID', 'success', 'SETTLED'])
+            // 🔥 TARIK DATA KEPEMILIKAN DARI TABEL ORDER ITEMS (DETAIL) 🔥
+            $purchasedProductIds = EProductOrderItem::whereHas('purchase', function($q) use ($user) {
+                    $q->where('user_id', $user->id)
+                      ->whereIn('status', ['PAID', 'success', 'SETTLED']);
+                })
                 ->pluck('e_product_id')
                 ->toArray();
 
@@ -60,10 +64,14 @@ class EProductController extends Controller
 
         $user = auth('sanctum')->user();
         if ($user) {
+            // 🔥 CEK KEPEMILIKAN MENGGUNAKAN RELASI ITEMS 🔥
             $isPurchased = EProductPurchase::where('user_id', $user->id)
-                ->where('e_product_id', $product->id)
+                ->whereHas('items', function($q) use ($product) {
+                    $q->where('e_product_id', $product->id);
+                })
                 ->whereIn('status', ['PAID', 'success', 'SETTLED'])
                 ->exists();
+                
             $product->is_purchased = $isPurchased;
         } else {
             $product->is_purchased = false;
@@ -84,8 +92,11 @@ class EProductController extends Controller
 
         $user = $request->user();
 
+        // 🔥 CEK KEPEMILIKAN MENGGUNAKAN RELASI ITEMS 🔥
         $hasPurchased = EProductPurchase::where('user_id', $user->id)
-            ->where('e_product_id', $id)
+            ->whereHas('items', function($q) use ($id) {
+                $q->where('e_product_id', $id);
+            })
             ->whereIn('status', ['PAID', 'success', 'SETTLED'])
             ->exists();
 
@@ -116,25 +127,42 @@ class EProductController extends Controller
 
     public function myProducts(Request $request)
     {
-        $purchases = EProductPurchase::with([
-            'product.category:id,name',
-            'product.author:id,name', 
-            'product.materials'
-        ])
-            ->where('user_id', $request->user()->id)
-            ->whereIn('status', ['PAID', 'success', 'SETTLED'])
+        // 🔥 AMBIL DATA DARI TABEL ORDER ITEMS KARENA STRUKTUR LAMA SUDAH DIUBAH 🔥
+        $orderItems = EProductOrderItem::with([
+                'product.category:id,name',
+                'product.author:id,name', 
+                'product.materials'
+            ])
+            ->whereHas('purchase', function($q) use ($request) {
+                $q->where('user_id', $request->user()->id)
+                  ->whereIn('status', ['PAID', 'success', 'SETTLED']);
+            })
             ->latest()
             ->get();
 
+        // Rekonstruksi struktur data agar frontend tidak error/blank
+        $formattedPurchases = $orderItems->map(function($item) {
+            return [
+                'id'         => $item->e_product_purchase_id,
+                'created_at' => $item->created_at,
+                'product'    => $item->product
+            ];
+        });
+
         return response()->json([
             'success' => true,
-            'data' => $purchases
+            'data' => $formattedPurchases
         ]);
     }
 
     public function myTransactions(Request $request)
     {
-        $transactions = EProductPurchase::with(['product', 'product.author:id,name', 'product.category:id,name'])
+        // 🔥 UPDATE RELASI: Ambil Invoice beserta daftar items (produk-produk di dalamnya) 🔥
+        $transactions = EProductPurchase::with([
+                'items.product', 
+                'items.product.author:id,name', 
+                'items.product.category:id,name'
+            ])
             ->where('user_id', $request->user()->id)
             ->latest()
             ->get();
@@ -147,25 +175,28 @@ class EProductController extends Controller
 
     public function myProductDetail(Request $request, $slug)
     {
-        $purchase = EProductPurchase::with([
-            'product.category:id,name',
-            'product.author:id,name',
-            'product.materials'
-        ])
-        ->where('user_id', $request->user()->id)
-        ->whereIn('status', ['PAID', 'success', 'SETTLED'])
-        ->whereHas('product', function ($query) use ($slug) {
-            $query->where('slug', $slug);
-        })
-        ->first();
+        // 🔥 CARI PRODUK DI TABEL ORDER ITEMS YANG INVOICENYA LUNAS 🔥
+        $orderItem = EProductOrderItem::with([
+                'product.category:id,name',
+                'product.author:id,name',
+                'product.materials'
+            ])
+            ->whereHas('purchase', function($q) use ($request) {
+                $q->where('user_id', $request->user()->id)
+                  ->whereIn('status', ['PAID', 'success', 'SETTLED']);
+            })
+            ->whereHas('product', function ($query) use ($slug) {
+                $query->where('slug', $slug);
+            })
+            ->first();
 
-        if (!$purchase || !$purchase->product) {
+        if (!$orderItem || !$orderItem->product) {
             return response()->json(['success' => false, 'message' => 'Akses ditolak. Anda belum memiliki produk ini.'], 403);
         }
 
         return response()->json([
             'success' => true,
-            'data' => $purchase->product
+            'data' => $orderItem->product
         ]);
     }
 
@@ -176,8 +207,11 @@ class EProductController extends Controller
     {
         $material = \App\Models\EProductMaterial::findOrFail($id);
 
+        // 🔥 CEK KEPEMILIKAN MENGGUNAKAN RELASI ITEMS 🔥
         $hasPurchased = EProductPurchase::where('user_id', $request->user()->id)
-            ->where('e_product_id', $material->e_product_id)
+            ->whereHas('items', function($q) use ($material) {
+                $q->where('e_product_id', $material->e_product_id);
+            })
             ->whereIn('status', ['PAID', 'success', 'SETTLED'])
             ->exists();
 
@@ -185,7 +219,6 @@ class EProductController extends Controller
             return response()->json(['success' => false, 'message' => 'Akses ditolak. Anda belum memiliki akses ke materi ini.'], 403);
         }
 
-        // Pastikan Anda memanggil path file yang sesuai dengan tempat penyimpanannya.
         $filePath = storage_path('app/public/' . $material->file_path);
 
         if (!file_exists($filePath)) {
