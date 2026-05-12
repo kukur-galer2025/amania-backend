@@ -13,13 +13,11 @@ class EProductTransactionController extends Controller
     public function index(Request $request)
     {
         try {
-            // Ambil semua transaksi e-product beserta relasi pembeli dan produknya
             $transactions = EProductPurchase::with([
                 'buyer:id,name,email,phone', 
-                'product:id,title,price'
+                'items.product:id,title,price' 
             ])->latest()->get();
 
-            // Hitung statistik realtime
             $stats = [
                 'total_revenue' => (int) $transactions->whereIn('status', ['PAID', 'SETTLED'])->sum('amount'),
                 'paid_count'    => $transactions->whereIn('status', ['PAID', 'SETTLED'])->count(),
@@ -27,11 +25,31 @@ class EProductTransactionController extends Controller
                 'expired_count' => $transactions->where('status', 'EXPIRED')->count(),
             ];
 
+            $formattedTransactions = $transactions->map(function ($tx) {
+                return [
+                    'id'               => $tx->id,
+                    'reference'        => $tx->reference,
+                    'tripay_reference' => $tx->tripay_reference, 
+                    'checkout_url'     => $tx->checkout_url,     
+                    'payment_method'   => $tx->payment_method,   
+                    'amount'           => $tx->amount,
+                    'status'           => $tx->status,
+                    'created_at'       => $tx->created_at,
+                    'buyer'            => $tx->buyer,
+                    // 🔥 PERBAIKAN: Tambahkan pengaman agar tidak error jika items kosong 🔥
+                    'product_names'    => $tx->items && $tx->items->count() > 0 
+                                            ? $tx->items->map(function($item) {
+                                                return $item->product ? $item->product->title : 'Produk Dihapus';
+                                              })->implode(', ')
+                                            : 'Tidak ada item'
+                ];
+            });
+
             return response()->json([
                 'success' => true,
                 'message' => 'Data transaksi E-Produk berhasil diambil.',
                 'stats'   => $stats,
-                'data'    => $transactions
+                'data'    => $formattedTransactions
             ], 200);
 
         } catch (\Exception $e) {
@@ -43,14 +61,10 @@ class EProductTransactionController extends Controller
         }
     }
 
-    /**
-     * Fitur tambahan: Admin bisa acc/melunasi transaksi secara manual 
-     * (Berguna jika peserta bayar langsung via transfer bank di luar Tripay)
-     */
     public function markAsPaid($id)
     {
         try {
-            $transaction = EProductPurchase::findOrFail($id);
+            $transaction = EProductPurchase::with('items')->findOrFail($id);
             
             if (in_array($transaction->status, ['PAID', 'SETTLED'])) {
                 return response()->json(['success' => false, 'message' => 'Transaksi ini sudah lunas sebelumnya.']);
@@ -58,12 +72,23 @@ class EProductTransactionController extends Controller
 
             $transaction->update(['status' => 'PAID']);
 
-            // Membatalkan tagihan unpaid lainnya untuk produk & user yang sama (Merapikan database)
-            EProductPurchase::where('user_id', $transaction->user_id)
-                ->where('e_product_id', $transaction->e_product_id)
-                ->where('id', '!=', $transaction->id)
-                ->where('status', 'UNPAID')
-                ->update(['status' => 'EXPIRED']);
+            if ($transaction->items && $transaction->items->count() > 0) {
+                $purchasedProductIds = $transaction->items->pluck('e_product_id')->toArray();
+
+                if (!empty($purchasedProductIds)) {
+                    $unpaidTransactionsToCancel = EProductPurchase::where('user_id', $transaction->user_id)
+                        ->where('id', '!=', $transaction->id)
+                        ->where('status', 'UNPAID')
+                        ->whereHas('items', function ($query) use ($purchasedProductIds) {
+                            $query->whereIn('e_product_id', $purchasedProductIds);
+                        })
+                        ->get();
+
+                    foreach ($unpaidTransactionsToCancel as $unpaidTx) {
+                        $unpaidTx->update(['status' => 'EXPIRED']);
+                    }
+                }
+            }
 
             return response()->json([
                 'success' => true,
@@ -75,9 +100,6 @@ class EProductTransactionController extends Controller
         }
     }
 
-    /**
-     * 🔥 EKSPORT PDF TRANSAKSI E-PRODUK 🔥
-     */
     public function exportPdf(Request $request)
     {
         try {
@@ -85,14 +107,12 @@ class EProductTransactionController extends Controller
             $status = $request->query('status', 'all');
             $search = $request->query('search', '');
 
-            $query = EProductPurchase::with(['buyer', 'product']);
+            $query = EProductPurchase::with(['buyer', 'items.product']);
 
-            // Filter Status
             if ($status !== 'all') {
                 $query->where('status', $status);
             }
 
-            // Filter Search (Nama Pembeli atau Invoice)
             if (!empty($search)) {
                 $query->where(function($q) use ($search) {
                     $q->where('reference', 'like', "%{$search}%")
@@ -105,7 +125,6 @@ class EProductTransactionController extends Controller
             $transactions = $query->latest()->get();
             $totalRevenue = $transactions->whereIn('status', ['PAID', 'SETTLED'])->sum('amount');
 
-            // 🔥 Desain HTML Laporan
             $html = '
             <!DOCTYPE html>
             <html>
@@ -158,6 +177,14 @@ class EProductTransactionController extends Controller
             
             foreach ($transactions as $idx => $tx) {
                 $statusColor = ($tx->status == 'PAID' || $tx->status == 'SETTLED') ? 'status-paid' : 'status-unpaid';
+                
+                // 🔥 PERBAIKAN PENGAMAN UNTUK PDF 🔥
+                $productNames = $tx->items && $tx->items->count() > 0 
+                    ? $tx->items->map(function($item) {
+                        return $item->product ? $item->product->title : 'Produk Dihapus';
+                      })->implode(',<br>')
+                    : 'Tidak ada item';
+
                 $html .= '
                         <tr>
                             <td align="center">'.($idx + 1).'</td>
@@ -167,7 +194,7 @@ class EProductTransactionController extends Controller
                                 '.($tx->buyer->email ?? '-').'<br>
                                 WA: '.($tx->buyer->phone ?? '-').'
                             </td>
-                            <td>'.($tx->product->title ?? 'Produk Dihapus').'</td>
+                            <td>'.$productNames.'</td>
                             <td>Rp '.number_format($tx->amount, 0, ',', '.').'</td>
                             <td class="'.$statusColor.'">'.strtoupper($tx->status).'</td>
                         </tr>';
