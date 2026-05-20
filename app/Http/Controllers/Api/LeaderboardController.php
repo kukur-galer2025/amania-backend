@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Models\EProductPurchase; 
+use App\Models\CourseEnrollment; 
 use Illuminate\Http\Request;
 use Carbon\Carbon;
 
@@ -26,14 +27,20 @@ class LeaderboardController extends Controller
             }
         };
 
-        // Query Dasar (Ambil total event & e-product)
+        // Query Dasar (Ambil total event, e-product & kursus online)
         $leadersQuery = User::select(['users.id', 'users.name', 'users.email', 'users.avatar'])
             ->withCount(['registrations' => $filterEvent])
-            ->addSelect(['e_products_count' => EProductPurchase::selectRaw('count(*)')
-                ->whereColumn('e_product_purchases.user_id', 'users.id')
-                ->whereIn('e_product_purchases.status', ['PAID', 'success', 'SETTLED']) 
-                ->when($filter === 'month', fn($q) => $q->whereMonth('e_product_purchases.created_at', Carbon::now()->month)->whereYear('e_product_purchases.created_at', Carbon::now()->year))
-                ->when($filter === 'week', fn($q) => $q->whereBetween('e_product_purchases.created_at', [Carbon::now()->startOfWeek(), Carbon::now()->endOfWeek()]))
+            ->addSelect([
+                'e_products_count' => EProductPurchase::selectRaw('count(*)')
+                    ->whereColumn('e_product_purchases.user_id', 'users.id')
+                    ->whereIn('e_product_purchases.status', ['PAID', 'success', 'SETTLED']) 
+                    ->when($filter === 'month', fn($q) => $q->whereMonth('e_product_purchases.created_at', Carbon::now()->month)->whereYear('e_product_purchases.created_at', Carbon::now()->year))
+                    ->when($filter === 'week', fn($q) => $q->whereBetween('e_product_purchases.created_at', [Carbon::now()->startOfWeek(), Carbon::now()->endOfWeek()])),
+                'courses_count' => CourseEnrollment::selectRaw('count(*)')
+                    ->whereColumn('course_enrollments.user_id', 'users.id')
+                    ->whereIn('course_enrollments.status', ['PAID', 'success', 'SETTLED'])
+                    ->when($filter === 'month', fn($q) => $q->whereMonth('course_enrollments.created_at', Carbon::now()->month)->whereYear('course_enrollments.created_at', Carbon::now()->year))
+                    ->when($filter === 'week', fn($q) => $q->whereBetween('course_enrollments.created_at', [Carbon::now()->startOfWeek(), Carbon::now()->endOfWeek()]))
             ]);
 
         // 🔥 LOGIKA STRICT FILTERING (TENDANG YANG NILAINYA 0) & SORTING
@@ -45,10 +52,14 @@ class LeaderboardController extends Controller
             // Hanya tampilkan yang E-Product-nya > 0
             $leadersQuery->havingRaw('IFNULL(e_products_count, 0) > 0')
                          ->orderByRaw('IFNULL(e_products_count, 0) DESC');
+        } elseif ($category === 'course') {
+            // Hanya tampilkan yang Kursus Online-nya > 0
+            $leadersQuery->havingRaw('IFNULL(courses_count, 0) > 0')
+                         ->orderByRaw('IFNULL(courses_count, 0) DESC');
         } else {
-            // Global: Tampilkan jika gabungan (Event + E-Product) > 0
-            $leadersQuery->havingRaw('(registrations_count + IFNULL(e_products_count, 0)) > 0')
-                         ->orderByRaw('(registrations_count + IFNULL(e_products_count, 0)) DESC');
+            // Global: Tampilkan jika gabungan (Event + E-Product + Kursus) > 0
+            $leadersQuery->havingRaw('(registrations_count + IFNULL(e_products_count, 0) + IFNULL(courses_count, 0)) > 0')
+                         ->orderByRaw('(registrations_count + IFNULL(e_products_count, 0) + IFNULL(courses_count, 0)) DESC');
         }
 
         $leaders = $leadersQuery->take(50)->get();
