@@ -14,6 +14,7 @@ use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\GlobalSearchController; 
 use App\Http\Controllers\Api\EProductController;
 use App\Http\Controllers\Api\MyEventController;
+use App\Http\Controllers\Api\CourseController;
 
 // --- 2. Import Checkout & Cart Controllers ---
 use App\Http\Controllers\Api\EProductCheckoutController;
@@ -38,6 +39,11 @@ use App\Http\Controllers\Api\Admin\EProductCategoryController as AdminEProductCa
 use App\Http\Controllers\Api\Admin\ImageUploadController;
 use App\Http\Controllers\Api\Admin\EProductTransactionController as AdminEProductTransaction;
 use App\Http\Controllers\Api\Admin\EProductMaterialController as AdminEProductMaterial;
+use App\Http\Controllers\Api\Admin\CourseCategoryController as AdminCourseCategory;
+use App\Http\Controllers\Api\Admin\CourseController as AdminCourse;
+use App\Http\Controllers\Api\Admin\CourseTransactionController as AdminCourseTransaction;
+use App\Http\Controllers\Api\Admin\CourseSectionController as AdminCourseSection;
+use App\Http\Controllers\Api\Admin\CourseLessonController as AdminCourseLesson;
 
 /*
 |--------------------------------------------------------------------------
@@ -65,6 +71,15 @@ Route::get('/e-products', [EProductController::class, 'index']);
 Route::get('/e-products/{slug}', [EProductController::class, 'show']);
 
 Route::get('/e-product-categories', [AdminEProductCategory::class, 'index']);
+
+Route::get('/courses', [CourseController::class, 'index']);
+Route::get('/courses/{slug}', [CourseController::class, 'show']);
+Route::get('/courses/{slug}/reviews', [CourseController::class, 'getReviews']);
+Route::get('/course-categories', [AdminCourseCategory::class, 'index']);
+
+// Download file lesson — diluar auth:sanctum karena browser <a target="_blank"> tidak kirim Authorization header
+// Auth ditangani di controller via ?token= query parameter
+Route::get('/courses/lessons/{lessonId}/download', [CourseController::class, 'downloadLessonFile']);
 
 Route::post('/tripay/callback', [EProductCheckoutController::class, 'tripayWebhook']);
 
@@ -100,6 +115,22 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/e-products/{id}/reviews', [EProductController::class, 'submitReview']);
     
     Route::get('/my-eproduct-transactions', [EProductController::class, 'myTransactions']);
+
+    // 🔥 KURSUS ONLINE (MEMBER) 🔥
+    Route::post('/checkout/course', [EProductCheckoutController::class, 'purchaseCourse']);
+    Route::get('/my-courses', [CourseController::class, 'myCourses']);
+    Route::get('/my-course-transactions', [CourseController::class, 'myTransactions']);
+    Route::get('/courses/{slug}/learn', [CourseController::class, 'learnCourse']);
+    Route::post('/courses/progress', [CourseController::class, 'markProgress']);
+    // Aliases agar frontend LearnClient.tsx kompatibel
+    Route::get('/my-courses/{slug}/learn', [CourseController::class, 'learnCourse']);
+    Route::post('/my-courses/{slug}/progress', [CourseController::class, 'markProgressBySlug']);
+    // Download file lesson — dipindah ke public route (line ~80) karena browser <a target="_blank">
+    // tidak bisa kirim Authorization header. Auth via ?token= di controller.
+
+    // Rating / Review kursus
+    Route::post('/courses/{slug}/reviews', [CourseController::class, 'submitReview']);
+    Route::get('/courses/{slug}/reviews', [CourseController::class, 'getReviews']);
 
     Route::get('/my-events/{slug}', [MyEventController::class, 'show']);
     Route::get('/my-events/{slug}/download-poster', [MyEventController::class, 'downloadPoster']);
@@ -187,4 +218,30 @@ Route::middleware(['auth:sanctum', 'role:superadmin'])
     Route::get('/e-product-transactions', [AdminEProductTransaction::class, 'index']);
     Route::post('/e-product-transactions/{id}/mark-paid', [AdminEProductTransaction::class, 'markAsPaid']);
     Route::get('/e-product-transactions/export', [AdminEProductTransaction::class, 'exportPdf']); 
+
+    // 🔥 KURSUS ONLINE (ADMIN) 🔥
+    Route::get('/course-categories', [AdminCourseCategory::class, 'index']);
+    Route::post('/course-categories', [AdminCourseCategory::class, 'store']);
+    Route::put('/course-categories/{id}', [AdminCourseCategory::class, 'update']);
+    Route::delete('/course-categories/{id}', [AdminCourseCategory::class, 'destroy']);
+
+    Route::get('/courses', [AdminCourse::class, 'index']);
+    Route::get('/courses/{id}', [AdminCourse::class, 'show']);
+    Route::post('/courses', [AdminCourse::class, 'store']);
+    Route::post('/courses/{id}', [AdminCourse::class, 'update']);
+    Route::delete('/courses/{id}', [AdminCourse::class, 'destroy']);
+
+    // Sections (nested under courses)
+    Route::post('/courses/{courseId}/sections', [AdminCourseSection::class, 'store']);
+    Route::put('/courses/{courseId}/sections/{sectionId}', [AdminCourseSection::class, 'update']);
+    Route::delete('/courses/{courseId}/sections/{sectionId}', [AdminCourseSection::class, 'destroy']);
+
+    // Lessons (nested under courses)
+    Route::post('/courses/{courseId}/lessons', [AdminCourseLesson::class, 'store']);
+    Route::post('/courses/{courseId}/lessons/{lessonId}', [AdminCourseLesson::class, 'update']); // POST for file upload
+    Route::put('/courses/{courseId}/lessons/{lessonId}', [AdminCourseLesson::class, 'update']);
+    Route::delete('/courses/{courseId}/lessons/{lessonId}', [AdminCourseLesson::class, 'destroy']);
+    Route::get('/courses/{courseId}/lessons/{lessonId}/download', [AdminCourseLesson::class, 'downloadFile']);
+
+    Route::get('/course-transactions', [AdminCourseTransaction::class, 'index']);
 });

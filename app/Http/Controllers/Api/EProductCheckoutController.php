@@ -7,6 +7,8 @@ use App\Models\EProduct;
 use App\Models\EProductPurchase;
 use App\Models\EProductOrderItem;
 use App\Models\Cart;
+use App\Models\Course;
+use App\Models\CourseEnrollment;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -266,7 +268,126 @@ class EProductCheckoutController extends Controller
     }
 
     // =========================================================================
-    // 3. WEBHOOK KHUSUS E-PRODUCT (CALLBACK TRIPAY)
+    // 3. CHECKOUT KURSUS ONLINE VIA TRIPAY
+    // =========================================================================
+    public function purchaseCourse(Request $request)
+    {
+        $request->validate([
+            'method'    => 'required|string',
+            'course_id' => 'required|exists:courses,id',
+        ]);
+
+        $user   = $request->user();
+        $course = Course::where('is_published', true)->findOrFail($request->course_id);
+
+        // Cek apakah sudah enrolled
+        $alreadyEnrolled = CourseEnrollment::where('user_id', $user->id)
+            ->where('course_id', $course->id)
+            ->whereIn('status', ['PAID', 'success', 'SETTLED'])
+            ->exists();
+
+        if ($alreadyEnrolled) {
+            return response()->json(['success' => false, 'message' => 'Anda sudah memiliki akses ke kursus ini.']);
+        }
+
+        $totalAmount = (int) $course->price;
+        $merchantRef = 'INV-CRS-' . strtoupper(Str::random(8)) . '-' . $user->id;
+
+        DB::beginTransaction();
+        try {
+            // JIKA GRATIS
+            if ($totalAmount == 0) {
+                CourseEnrollment::create([
+                    'reference'      => $merchantRef,
+                    'user_id'        => $user->id,
+                    'course_id'      => $course->id,
+                    'amount'         => 0,
+                    'payment_method' => 'FREE_CLAIM',
+                    'status'         => 'PAID',
+                ]);
+
+                DB::commit();
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Kursus gratis berhasil diklaim!',
+                    'is_free' => true,
+                ]);
+            }
+
+            // TRIPAY CHECKOUT
+            $privateKey   = env('TRIPAY_PRIVATE_KEY');
+            $merchantCode = env('TRIPAY_MERCHANT_CODE');
+            $apiKey       = env('TRIPAY_API_KEY');
+
+            if (empty($privateKey) || empty($merchantCode) || empty($apiKey)) {
+                DB::rollBack();
+                return response()->json(['success' => false, 'message' => 'Kredensial Tripay belum lengkap.'], 400);
+            }
+
+            $apiUrl    = rtrim(env('TRIPAY_URL', 'https://tripay.co.id/api/'), '/') . '/transaction/create';
+            $signature = hash_hmac('sha256', $merchantCode . $merchantRef . $totalAmount, $privateKey);
+
+            $payload = [
+                'method'         => $request->input('method'),
+                'merchant_ref'   => $merchantRef,
+                'amount'         => $totalAmount,
+                'customer_name'  => $user->name ?? 'Member Amania',
+                'customer_email' => $user->email ?? 'email@amania.id',
+                'customer_phone' => $user->phone ?? '08000000000',
+                'order_items'    => [[
+                    'sku'      => 'CRS-' . $course->id,
+                    'name'     => substr($course->title, 0, 50),
+                    'price'    => $totalAmount,
+                    'quantity' => 1,
+                ]],
+                'return_url'   => rtrim(env('FRONTEND_URL', 'https://amania.id'), '/') . '/my-courses',
+                'expired_time' => (time() + (24 * 60 * 60)),
+                'signature'    => $signature,
+            ];
+
+            $response = Http::withoutVerifying()
+                ->withHeaders(['Authorization' => 'Bearer ' . $apiKey])
+                ->post($apiUrl, $payload);
+
+            $result = $response->json();
+
+            if ($response->successful() && isset($result['success']) && $result['success'] == true) {
+                CourseEnrollment::create([
+                    'reference'        => $merchantRef,
+                    'tripay_reference' => $result['data']['reference'],
+                    'user_id'          => $user->id,
+                    'course_id'        => $course->id,
+                    'amount'           => $totalAmount,
+                    'checkout_url'     => $result['data']['checkout_url'],
+                    'expired_time'     => $result['data']['expired_time'] ?? null,
+                    'payment_method'   => $request->input('method'),
+                    'status'           => 'UNPAID',
+                ]);
+
+                DB::commit();
+                return response()->json([
+                    'success'      => true,
+                    'message'      => 'Pesanan kursus berhasil dibuat!',
+                    'checkout_url' => $result['data']['checkout_url'],
+                ]);
+            }
+
+            DB::rollBack();
+            Log::error('Tripay Course Transaction Error: ', $result ?? []);
+            return response()->json([
+                'success' => false,
+                'message' => 'Tripay Error: ' . ($result['message'] ?? 'Gagal membuat transaksi.')
+            ], 400);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Course Checkout Error: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Kesalahan sistem: ' . $e->getMessage()], 500);
+        }
+    }
+
+    // =========================================================================
+    // 4. WEBHOOK CALLBACK TRIPAY (E-PRODUCT + KURSUS)
     // =========================================================================
     public function tripayWebhook(Request $request)
     {
@@ -290,6 +411,9 @@ class EProductCheckoutController extends Controller
         $status = $data->status;
 
         try {
+            // ============================================
+            // HANDLE E-PRODUCT TRANSACTIONS (INV-EP-)
+            // ============================================
             if (Str::startsWith($merchantRef, 'INV-EP-')) {
                 $purchase = EProductPurchase::where('reference', $merchantRef)->first();
                 
@@ -298,17 +422,33 @@ class EProductCheckoutController extends Controller
                 }
 
                 if (in_array($status, ['PAID', 'SETTLED'])) {
-                    
                     $updateData = ['status' => 'PAID'];
-                    
                     if (isset($data->payment_method)) {
                         $updateData['payment_method'] = $data->payment_method;
                     }
-                    
                     $purchase->update($updateData);
-
                 } elseif (in_array($status, ['EXPIRED', 'FAILED', 'REFUND'])) {
                     $purchase->update(['status' => 'EXPIRED']);
+                }
+
+            // ============================================
+            // HANDLE COURSE TRANSACTIONS (INV-CRS-)
+            // ============================================
+            } elseif (Str::startsWith($merchantRef, 'INV-CRS-')) {
+                $enrollment = CourseEnrollment::where('reference', $merchantRef)->first();
+
+                if (!$enrollment) {
+                    return response()->json(['success' => false, 'message' => 'Enrollment not found'], 404);
+                }
+
+                if (in_array($status, ['PAID', 'SETTLED'])) {
+                    $updateData = ['status' => 'PAID'];
+                    if (isset($data->payment_method)) {
+                        $updateData['payment_method'] = $data->payment_method;
+                    }
+                    $enrollment->update($updateData);
+                } elseif (in_array($status, ['EXPIRED', 'FAILED', 'REFUND'])) {
+                    $enrollment->update(['status' => 'EXPIRED']);
                 }
 
             } else {
