@@ -22,10 +22,17 @@ class EventController extends Controller
 
             // 🔥 LOGIKA PENCARIAN BERDASARKAN QUERY 🔥
             if ($search) {
-                $query->where('title', 'like', '%' . $search . '%')
-                      ->orWhereHas('organizer', function ($q) use ($search) {
-                          $q->where('name', 'like', '%' . $search . '%');
+                $query->where(function($q) use ($search) {
+                    $q->where('title', 'like', '%' . $search . '%')
+                      ->orWhereHas('organizer', function ($orgQ) use ($search) {
+                          $orgQ->where('name', 'like', '%' . $search . '%');
                       });
+                });
+            }
+
+            // 🔥 LOGIKA FILTER EVENT SEDANG BERJALAN / AKAN DATANG 🔥
+            if ($request->query('running') == '1') {
+                $query->where('end_time', '>=', now());
             }
 
             $events = $query->get();
