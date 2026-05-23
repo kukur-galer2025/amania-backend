@@ -59,7 +59,9 @@ class EventController extends Controller
     {
         try {
             $event = Event::with(['materials', 'speakers', 'bankAccounts', 'organizer'])
-                ->where('slug', $slug)
+                ->where(function ($q) use ($slug) {
+                    $q->where('slug', $slug)->orWhere('id', $slug);
+                })
                 ->first();
 
             if (!$event) {

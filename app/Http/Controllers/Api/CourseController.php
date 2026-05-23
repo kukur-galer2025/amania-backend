@@ -44,7 +44,9 @@ class CourseController extends Controller
     // =========================================================================
     public function show(Request $request, $slug)
     {
-        $course = Course::where('slug', $slug)
+        $course = Course::where(function ($q) use ($slug) {
+            $q->where('slug', $slug)->orWhere('id', $slug);
+        })
             ->where('is_published', true)
             ->with(['category', 'instructor', 'sections.lessons', 'reviews.user'])
             ->withCount('reviews')
