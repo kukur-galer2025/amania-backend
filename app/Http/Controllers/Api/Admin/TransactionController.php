@@ -17,13 +17,7 @@ class TransactionController extends Controller
         $queryReg = Registration::with(['event:id,title,basic_price', 'user:id,name,email']);
         $queryEvent = Event::select('id', 'title')->orderBy('created_at', 'desc');
 
-        // 🔥 PROTEKSI MULTI-TENANT 🔥
-        if ($currentUser->role === 'organizer') {
-            $queryReg->whereHas('event', function($q) use ($currentUser) {
-                $q->where('user_id', $currentUser->id);
-            });
-            $queryEvent->where('user_id', $currentUser->id);
-        }
+
 
         $transactions = $queryReg->latest()->get();
 

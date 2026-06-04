@@ -18,6 +18,7 @@ use App\Http\Controllers\Api\CourseController;
 
 // --- 2. Import Checkout & Cart Controllers ---
 use App\Http\Controllers\Api\EProductCheckoutController;
+use App\Http\Controllers\Api\LessonCommentController;
 use App\Http\Controllers\Api\CartController; // 🔥 IMPORT CART CONTROLLER 🔥
 
 // --- 3. Import Admin Controllers ---
@@ -77,9 +78,10 @@ Route::get('/courses/{slug}', [CourseController::class, 'show']);
 Route::get('/courses/{slug}/reviews', [CourseController::class, 'getReviews']);
 Route::get('/course-categories', [AdminCourseCategory::class, 'index']);
 
-// Download file lesson — diluar auth:sanctum karena browser <a target="_blank"> tidak kirim Authorization header
+// Download file lesson & certificate — diluar auth:sanctum karena browser <a target="_blank"> tidak kirim Authorization header
 // Auth ditangani di controller via ?token= query parameter
 Route::get('/courses/lessons/{lessonId}/download', [CourseController::class, 'downloadLessonFile']);
+Route::get('/my-courses/{slug}/certificate', [CourseController::class, 'downloadCertificate']);
 
 Route::post('/tripay/callback', [EProductCheckoutController::class, 'tripayWebhook']);
 
@@ -125,6 +127,10 @@ Route::middleware('auth:sanctum')->group(function () {
     // Aliases agar frontend LearnClient.tsx kompatibel
     Route::get('/my-courses/{slug}/learn', [CourseController::class, 'learnCourse']);
     Route::post('/my-courses/{slug}/progress', [CourseController::class, 'markProgressBySlug']);
+    
+    // Ujian Akhir (Member)
+    Route::get('/my-courses/{slug}/exam', [\App\Http\Controllers\Api\ExamController::class, 'getExam']);
+    Route::post('/my-courses/{slug}/exam/submit', [\App\Http\Controllers\Api\ExamController::class, 'submitExam']);
     // Download file lesson — dipindah ke public route (line ~80) karena browser <a target="_blank">
     // tidak bisa kirim Authorization header. Auth via ?token= di controller.
 
@@ -132,20 +138,73 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/courses/{slug}/reviews', [CourseController::class, 'submitReview']);
     Route::get('/courses/{slug}/reviews', [CourseController::class, 'getReviews']);
 
+    // Diskusi / Q&A
+    Route::get('/courses/lessons/{lessonId}/comments', [LessonCommentController::class, 'index']);
+    Route::post('/courses/lessons/{lessonId}/comments', [LessonCommentController::class, 'store']);
+    Route::delete('/courses/lessons/comments/{id}', [LessonCommentController::class, 'destroy']);
+
     Route::get('/my-events/{slug}', [MyEventController::class, 'show']);
     Route::get('/my-events/{slug}/download-poster', [MyEventController::class, 'downloadPoster']);
     Route::get('/my-events/materials/{id}/download', [MyEventController::class, 'downloadMaterial']);
 });
 
 // =========================================================================
-// SECTION 3A: RUTE MULTI-TENANT (Superadmin | Organizer)
+// SECTION 3A: RUTE BERSAMA (Superadmin | Creator)
 // =========================================================================
-Route::middleware(['auth:sanctum', 'role:superadmin|organizer'])
-    ->prefix('admin')
-    ->group(function () {
-    
+Route::middleware(['auth:sanctum', 'role:superadmin|creator'])->prefix('admin')->group(function () {
     Route::get('/dashboard', [AdminDashboard::class, 'index']);
     Route::post('/upload-image', [ImageUploadController::class, 'upload']);
+    
+    Route::get('/global-search', [AdminGlobalSearch::class, 'search']);
+    Route::get('/notifications', [AdminNotification::class, 'index']);
+    Route::post('/notifications/read', [AdminNotification::class, 'markAllAsRead']);
+
+    // Profil Admin
+    Route::post('/profile', [ProfileController::class, 'update']);
+
+    // E-Products (Creator & Superadmin)
+    Route::get('/e-product-categories', [AdminEProductCategory::class, 'index']);
+    Route::get('/e-products', [AdminEProduct::class, 'index']);
+    Route::get('/e-products/{id}', [AdminEProduct::class, 'show']);
+    Route::post('/e-products', [AdminEProduct::class, 'store']);
+    Route::post('/e-products/{id}', [AdminEProduct::class, 'update']); 
+    Route::delete('/e-products/{id}', [AdminEProduct::class, 'destroy']);
+    Route::post('/e-product-materials', [AdminEProductMaterial::class, 'store']);
+    Route::delete('/e-product-materials/{id}', [AdminEProductMaterial::class, 'destroy']);
+
+    // Courses (Creator & Superadmin)
+    Route::get('/course-categories', [AdminCourseCategory::class, 'index']);
+    Route::get('/courses', [AdminCourse::class, 'index']);
+    Route::get('/courses/{id}', [AdminCourse::class, 'show']);
+    Route::post('/courses', [AdminCourse::class, 'store']);
+    Route::post('/courses/{id}', [AdminCourse::class, 'update']);
+    Route::delete('/courses/{id}', [AdminCourse::class, 'destroy']);
+    Route::post('/courses/{courseId}/sections', [AdminCourseSection::class, 'store']);
+    Route::put('/courses/{courseId}/sections/{sectionId}', [AdminCourseSection::class, 'update']);
+    Route::delete('/courses/{courseId}/sections/{sectionId}', [AdminCourseSection::class, 'destroy']);
+    Route::post('/courses/{courseId}/lessons', [AdminCourseLesson::class, 'store']);
+    Route::post('/courses/{courseId}/lessons/{lessonId}', [AdminCourseLesson::class, 'update']); 
+    Route::put('/courses/{courseId}/lessons/{lessonId}', [AdminCourseLesson::class, 'update']);
+    Route::delete('/courses/{courseId}/lessons/{lessonId}', [AdminCourseLesson::class, 'destroy']);
+    Route::get('/courses/{courseId}/lessons/{lessonId}/download', [AdminCourseLesson::class, 'downloadFile']);
+
+    // Ujian / Kuis (Creator & Superadmin)
+    Route::get('/courses/{courseId}/exam', [\App\Http\Controllers\Api\AdminExamController::class, 'show']);
+    Route::post('/courses/{courseId}/exam', [\App\Http\Controllers\Api\AdminExamController::class, 'storeOrUpdate']);
+    Route::post('/courses/exams/{examId}/questions', [\App\Http\Controllers\Api\AdminExamController::class, 'storeQuestion']);
+    Route::put('/courses/exams/questions/{questionId}', [\App\Http\Controllers\Api\AdminExamController::class, 'updateQuestion']);
+    Route::delete('/courses/exams/questions/{questionId}', [\App\Http\Controllers\Api\AdminExamController::class, 'destroyQuestion']);
+
+    // Ruang Diskusi Q&A (Creator & Superadmin)
+    Route::get('/discussions', [\App\Http\Controllers\Api\AdminDiscussionController::class, 'index']);
+    Route::post('/discussions/{id}/reply', [\App\Http\Controllers\Api\AdminDiscussionController::class, 'reply']);
+    Route::delete('/discussions/{id}', [\App\Http\Controllers\Api\AdminDiscussionController::class, 'destroy']);
+});
+
+// =========================================================================
+// SECTION 3B: RUTE EKSKLUSIF SUPERADMIN (EVENTS, REPORTS, DLL)
+// =========================================================================
+Route::middleware(['auth:sanctum', 'role:superadmin'])->prefix('admin')->group(function () {
 
     Route::get('/events', [AdminEvent::class, 'index']);
     Route::get('/events/{id}', [AdminEvent::class, 'show']);
@@ -179,18 +238,7 @@ Route::middleware(['auth:sanctum', 'role:superadmin|organizer'])
     Route::post('/articles/{id}', [AdminArticle::class, 'update']); 
     Route::delete('/articles/{id}', [AdminArticle::class, 'destroy']);
 
-    Route::get('/global-search', [AdminGlobalSearch::class, 'search']);
-    Route::get('/notifications', [AdminNotification::class, 'index']);
-    Route::post('/notifications/read', [AdminNotification::class, 'markAllAsRead']);
-});
-
-// =========================================================================
-// SECTION 3B: RUTE EKSKLUSIF SUPERADMIN
-// =========================================================================
-Route::middleware(['auth:sanctum', 'role:superadmin'])
-    ->prefix('admin')
-    ->group(function () {
-    
+    // Kelola User
     Route::get('/users', [AdminUser::class, 'index']);
     Route::post('/users', [AdminUser::class, 'store']); 
     Route::put('/users/{id}', [AdminUser::class, 'update']); 
@@ -201,47 +249,22 @@ Route::middleware(['auth:sanctum', 'role:superadmin'])
     Route::put('/article-categories/{id}', [AdminCategory::class, 'update']);
     Route::delete('/article-categories/{id}', [AdminCategory::class, 'destroy']);
 
-    Route::get('/e-product-categories', [AdminEProductCategory::class, 'index']);
     Route::post('/e-product-categories', [AdminEProductCategory::class, 'store']);
     Route::put('/e-product-categories/{id}', [AdminEProductCategory::class, 'update']);
     Route::delete('/e-product-categories/{id}', [AdminEProductCategory::class, 'destroy']);
 
-    Route::get('/e-products', [AdminEProduct::class, 'index']);
-    Route::get('/e-products/{id}', [AdminEProduct::class, 'show']);
-    Route::post('/e-products', [AdminEProduct::class, 'store']);
-    Route::post('/e-products/{id}', [AdminEProduct::class, 'update']); 
-    Route::delete('/e-products/{id}', [AdminEProduct::class, 'destroy']);
 
-    Route::post('/e-product-materials', [AdminEProductMaterial::class, 'store']);
-    Route::delete('/e-product-materials/{id}', [AdminEProductMaterial::class, 'destroy']);
 
     Route::get('/e-product-transactions', [AdminEProductTransaction::class, 'index']);
     Route::post('/e-product-transactions/{id}/mark-paid', [AdminEProductTransaction::class, 'markAsPaid']);
     Route::get('/e-product-transactions/export', [AdminEProductTransaction::class, 'exportPdf']); 
 
     // 🔥 KURSUS ONLINE (ADMIN) 🔥
-    Route::get('/course-categories', [AdminCourseCategory::class, 'index']);
     Route::post('/course-categories', [AdminCourseCategory::class, 'store']);
     Route::put('/course-categories/{id}', [AdminCourseCategory::class, 'update']);
     Route::delete('/course-categories/{id}', [AdminCourseCategory::class, 'destroy']);
 
-    Route::get('/courses', [AdminCourse::class, 'index']);
-    Route::get('/courses/{id}', [AdminCourse::class, 'show']);
-    Route::post('/courses', [AdminCourse::class, 'store']);
-    Route::post('/courses/{id}', [AdminCourse::class, 'update']);
-    Route::delete('/courses/{id}', [AdminCourse::class, 'destroy']);
 
-    // Sections (nested under courses)
-    Route::post('/courses/{courseId}/sections', [AdminCourseSection::class, 'store']);
-    Route::put('/courses/{courseId}/sections/{sectionId}', [AdminCourseSection::class, 'update']);
-    Route::delete('/courses/{courseId}/sections/{sectionId}', [AdminCourseSection::class, 'destroy']);
-
-    // Lessons (nested under courses)
-    Route::post('/courses/{courseId}/lessons', [AdminCourseLesson::class, 'store']);
-    Route::post('/courses/{courseId}/lessons/{lessonId}', [AdminCourseLesson::class, 'update']); // POST for file upload
-    Route::put('/courses/{courseId}/lessons/{lessonId}', [AdminCourseLesson::class, 'update']);
-    Route::delete('/courses/{courseId}/lessons/{lessonId}', [AdminCourseLesson::class, 'destroy']);
-    Route::get('/courses/{courseId}/lessons/{lessonId}/download', [AdminCourseLesson::class, 'downloadFile']);
 
     Route::get('/course-transactions', [AdminCourseTransaction::class, 'index']);
 });

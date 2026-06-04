@@ -20,10 +20,7 @@ class ArticleController extends Controller
         $query = Article::with(['category', 'author']);
 
         // 🔥 LOGIKA MULTI-TENANT 🔥
-        // Jika yang login adalah organizer, hanya tampilkan artikel miliknya
-        if ($currentUser->role === 'organizer') {
-            $query->where('user_id', $currentUser->id);
-        }
+
 
         $articles = $query->latest()->get();
 
@@ -41,13 +38,7 @@ class ArticleController extends Controller
         $currentUser = $request->user();
         $article = Article::with('category')->findOrFail($id);
 
-        // 🔥 PROTEKSI MULTI-TENANT 🔥
-        if ($currentUser->role === 'organizer' && $article->user_id !== $currentUser->id) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Akses ditolak. Anda hanya bisa melihat artikel yang Anda tulis.'
-            ], 403);
-        }
+
 
         return response()->json([
             'success' => true,
@@ -84,13 +75,7 @@ class ArticleController extends Controller
             $tags = [];
         }
 
-        // 🔥 PENENTUAN STATUS PUBLISH (SISTEM MODERASI) 🔥
-        // Organizer yang membuat artikel otomatis masuk ke Draft (is_published = 0)
-        // agar harus di-review Superadmin dulu sebelum tayang ke publik.
         $isPublished = (bool)$request->is_published;
-        if ($currentUser->role === 'organizer') {
-             $isPublished = false; 
-        }
 
         $article = Article::create([
             'title' => $request->title,
@@ -104,9 +89,7 @@ class ArticleController extends Controller
             'tags' => $tags, 
         ]);
 
-        $message = $currentUser->role === 'organizer' 
-                 ? 'Artikel berhasil disimpan. Menunggu persetujuan Admin sebelum ditayangkan!' 
-                 : 'Artikel berhasil diterbitkan!';
+        $message = 'Artikel berhasil diterbitkan!';
 
         return response()->json([
             'success' => true,
@@ -123,13 +106,7 @@ class ArticleController extends Controller
         $currentUser = $request->user();
         $article = Article::findOrFail($id);
 
-        // 🔥 PROTEKSI MULTI-TENANT 🔥
-        if ($currentUser->role === 'organizer' && $article->user_id !== $currentUser->id) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Akses ditolak. Anda hanya bisa mengedit artikel yang Anda tulis.'
-            ], 403);
-        }
+
 
         $request->validate([
             'title' => 'required|string|max:255',
@@ -144,13 +121,7 @@ class ArticleController extends Controller
         $data = $request->only(['title', 'article_category_id', 'content', 'read_time']);
         
         // Atur Status Publish
-        if ($currentUser->role === 'superadmin') {
-            $data['is_published'] = (bool)$request->is_published;
-        } else {
-            // Jika organizer mengedit artikelnya, status kembalikan ke draft
-            // untuk direview ulang oleh Superadmin.
-            $data['is_published'] = false; 
-        }
+        $data['is_published'] = (bool)$request->is_published;
 
         if ($request->title !== $article->title) {
             $data['slug'] = Str::slug($request->title) . '-' . uniqid();
@@ -175,9 +146,7 @@ class ArticleController extends Controller
 
         $article->update($data);
 
-        $message = $currentUser->role === 'organizer' 
-                 ? 'Artikel diperbarui. Status kembali ke Menunggu Review.' 
-                 : 'Artikel berhasil diperbarui!';
+        $message = 'Artikel berhasil diperbarui!';
 
         return response()->json([
             'success' => true,
@@ -194,13 +163,7 @@ class ArticleController extends Controller
         $currentUser = $request->user();
         $article = Article::findOrFail($id);
 
-        // 🔥 PROTEKSI MULTI-TENANT 🔥
-        if ($currentUser->role === 'organizer' && $article->user_id !== $currentUser->id) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Akses ditolak. Anda hanya bisa menghapus artikel Anda sendiri.'
-            ], 403);
-        }
+
 
         if ($article->image && Storage::disk('public')->exists($article->image)) {
             Storage::disk('public')->delete($article->image);

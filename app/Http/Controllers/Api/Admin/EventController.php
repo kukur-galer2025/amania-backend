@@ -16,9 +16,7 @@ class EventController extends Controller
         $currentUser = $request->user();
         $query = Event::with('bankAccounts');
 
-        if ($currentUser->role === 'organizer') {
-            $query->where('user_id', $currentUser->id);
-        }
+        // Semua role yang bisa masuk ke sini (superadmin) bisa melihat semua data
 
         $events = $query->latest()->get();
         return response()->json(['success' => true, 'data' => $events]);
@@ -29,9 +27,7 @@ class EventController extends Controller
         $currentUser = $request->user();
         $event = Event::with(['materials', 'speakers', 'bankAccounts'])->findOrFail($id);
 
-        if ($currentUser->role === 'organizer' && $event->user_id !== $currentUser->id) {
-            return response()->json(['success' => false, 'message' => 'Akses ditolak'], 403);
-        }
+
 
         return response()->json(['success' => true, 'data' => $event]);
     }
@@ -104,9 +100,7 @@ class EventController extends Controller
         $currentUser = $request->user();
         $event = Event::findOrFail($id);
 
-        if ($currentUser->role === 'organizer' && $event->user_id !== $currentUser->id) {
-            return response()->json(['success' => false, 'message' => 'Akses ditolak'], 403);
-        }
+
 
         $validated = $request->validate([
             'title' => 'required|string|max:255',
@@ -173,9 +167,7 @@ class EventController extends Controller
         $currentUser = $request->user();
         $event = Event::findOrFail($id);
         
-        if ($currentUser->role === 'organizer' && $event->user_id !== $currentUser->id) {
-            return response()->json(['success' => false, 'message' => 'Akses ditolak'], 403);
-        }
+
 
         if ($event->image) {
             Storage::disk('public')->delete($event->image);

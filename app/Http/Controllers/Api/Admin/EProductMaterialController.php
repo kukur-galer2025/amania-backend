@@ -26,6 +26,11 @@ class EProductMaterialController extends Controller
             'file.mimes' => 'Format file harus berupa PDF, ZIP, atau RAR.',
         ]);
 
+        $product = \App\Models\EProduct::findOrFail($request->e_product_id);
+        if ($request->user()->role === 'creator' && $product->user_id !== $request->user()->id) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized'], 403);
+        }
+
         $data = $request->only(['e_product_id', 'title', 'type']);
 
         if ($request->type === 'file' && $request->hasFile('file')) {
@@ -46,9 +51,14 @@ class EProductMaterialController extends Controller
     /**
      * HAPUS MATERI
      */
-    public function destroy($id)
+    public function destroy(Request $request, $id)
     {
         $material = EProductMaterial::findOrFail($id);
+        
+        $product = \App\Models\EProduct::findOrFail($material->e_product_id);
+        if ($request->user()->role === 'creator' && $product->user_id !== $request->user()->id) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized'], 403);
+        }
 
         // Jika file fisik, hapus dari storage
         if ($material->type === 'file' && $material->file_path) {

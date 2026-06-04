@@ -20,10 +20,7 @@ class ReportController extends Controller
 
         $queryEvent = Event::query();
 
-        // 🔥 PROTEKSI MULTI-TENANT 🔥
-        if ($currentUser->role === 'organizer') {
-            $queryEvent->where('user_id', $currentUser->id);
-        }
+
 
         // A. Dropdown Frontend
         $allEvents = (clone $queryEvent)->select('id', 'title')->orderBy('created_at', 'desc')->get();
@@ -79,12 +76,7 @@ class ReportController extends Controller
         // 🔥 PERBAIKAN: Menambahkan 'phone' agar bisa ditarik ke dalam laporan PDF 🔥
         $query = Registration::with(['user:id,name,email,phone', 'event:id,title']);
 
-        // 🔥 PROTEKSI MULTI-TENANT EKSPORT 🔥
-        if ($currentUser->role === 'organizer') {
-            $query->whereHas('event', function($q) use ($currentUser) {
-                $q->where('user_id', $currentUser->id);
-            });
-        }
+
 
         // Filter Event
         $eventName = "Semua Program Event";

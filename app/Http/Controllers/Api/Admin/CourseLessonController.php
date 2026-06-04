@@ -15,6 +15,11 @@ class CourseLessonController extends Controller
      */
     public function store(Request $request, $courseId)
     {
+        $course = \App\Models\Course::findOrFail($courseId);
+        if ($request->user()->role === 'creator' && $course->user_id !== $request->user()->id) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized'], 403);
+        }
+
         $type = $request->input('type', 'video');
 
         $rules = [
@@ -68,6 +73,11 @@ class CourseLessonController extends Controller
      */
     public function update(Request $request, $courseId, $lessonId)
     {
+        $course = \App\Models\Course::findOrFail($courseId);
+        if ($request->user()->role === 'creator' && $course->user_id !== $request->user()->id) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized'], 403);
+        }
+
         $lesson = CourseLesson::findOrFail($lessonId);
         $type = $request->input('type', $lesson->type ?? 'video');
 
@@ -131,8 +141,13 @@ class CourseLessonController extends Controller
     /**
      * HAPUS LESSON
      */
-    public function destroy($courseId, $lessonId)
+    public function destroy(Request $request, $courseId, $lessonId)
     {
+        $course = \App\Models\Course::findOrFail($courseId);
+        if ($request->user()->role === 'creator' && $course->user_id !== $request->user()->id) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized'], 403);
+        }
+
         $lesson = CourseLesson::findOrFail($lessonId);
 
         // Delete physical file if exists

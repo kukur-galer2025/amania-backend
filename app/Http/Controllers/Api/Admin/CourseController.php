@@ -16,13 +16,18 @@ class CourseController extends Controller
     /**
      * LIST SEMUA KURSUS (ADMIN)
      */
-    public function index()
+    public function index(Request $request)
     {
-        $courses = Course::with(['instructor', 'category'])
+        $query = Course::with(['instructor', 'category'])
             ->withCount(['sections', 'enrollments', 'lessons', 'reviews'])
             ->withAvg('reviews', 'rating')
-            ->latest()
-            ->get();
+            ->latest();
+
+        if ($request->user()->role === 'creator') {
+            $query->where('user_id', $request->user()->id);
+        }
+
+        $courses = $query->get();
 
         return response()->json(['success' => true, 'data' => $courses]);
     }
@@ -30,9 +35,14 @@ class CourseController extends Controller
     /**
      * DETAIL KURSUS + SECTIONS + LESSONS (ADMIN EDIT)
      */
-    public function show($id)
+    public function show(Request $request, $id)
     {
         $course = Course::with(['category', 'sections.lessons'])->findOrFail($id);
+
+        if ($request->user()->role === 'creator' && $course->user_id !== $request->user()->id) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized'], 403);
+        }
+
         return response()->json(['success' => true, 'data' => $course]);
     }
 
@@ -74,6 +84,10 @@ class CourseController extends Controller
     public function update(Request $request, $id)
     {
         $course = Course::findOrFail($id);
+
+        if ($request->user()->role === 'creator' && $course->user_id !== $request->user()->id) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized'], 403);
+        }
 
         $request->validate([
             'title'              => 'required|string|max:255',
@@ -176,9 +190,13 @@ class CourseController extends Controller
     /**
      * HAPUS KURSUS
      */
-    public function destroy($id)
+    public function destroy(Request $request, $id)
     {
         $course = Course::findOrFail($id);
+
+        if ($request->user()->role === 'creator' && $course->user_id !== $request->user()->id) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized'], 403);
+        }
 
         if ($course->thumbnail && !Str::startsWith($course->thumbnail, ['http://', 'https://']) && Storage::disk('public')->exists($course->thumbnail)) {
             Storage::disk('public')->delete($course->thumbnail);

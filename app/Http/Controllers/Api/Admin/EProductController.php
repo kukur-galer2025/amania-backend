@@ -13,20 +13,30 @@ class EProductController extends Controller
     /**
      * TAMPILKAN SEMUA E-PRODUK
      */
-    public function index()
+    public function index(Request $request)
     {
-        // 🔥 PERBAIKAN: Load relasi 'category' agar nama kategori muncul di tabel Admin
-        $products = EProduct::with(['author', 'category'])->latest()->get();
+        $query = EProduct::with(['author', 'category'])->latest();
+        
+        if ($request->user()->role === 'creator') {
+            $query->where('user_id', $request->user()->id);
+        }
+
+        $products = $query->get();
         return response()->json(['success' => true, 'data' => $products]);
     }
 
     /**
      * TAMPILKAN SATU E-PRODUK (Untuk Edit)
      */
-    public function show($id)
+    public function show(Request $request, $id)
     {
         // 🔥 PERBAIKAN: Tambahkan relasi 'materials' agar bisa ditampilkan di Frontend
         $product = EProduct::with(['category', 'materials'])->findOrFail($id);
+
+        if ($request->user()->role === 'creator' && $product->user_id !== $request->user()->id) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized'], 403);
+        }
+
         return response()->json(['success' => true, 'data' => $product]);
     }
 
@@ -72,6 +82,10 @@ class EProductController extends Controller
     {
         $product = EProduct::findOrFail($id);
 
+        if ($request->user()->role === 'creator' && $product->user_id !== $request->user()->id) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized'], 403);
+        }
+
         $request->validate([
             'title' => 'required|string|max:255',
             'e_product_category_id' => 'required|exists:e_product_categories,id', // 🔥 WAJIB ADA KATEGORI
@@ -111,9 +125,13 @@ class EProductController extends Controller
     /**
      * HAPUS E-PRODUK
      */
-    public function destroy($id)
+    public function destroy(Request $request, $id)
     {
         $product = EProduct::findOrFail($id);
+
+        if ($request->user()->role === 'creator' && $product->user_id !== $request->user()->id) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized'], 403);
+        }
 
         // Hapus file cover fisik
         if ($product->cover_image && !Str::startsWith($product->cover_image, ['http://', 'https://']) && Storage::disk('public')->exists($product->cover_image)) {

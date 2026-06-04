@@ -16,6 +16,10 @@ class CourseSectionController extends Controller
     {
         $course = Course::findOrFail($courseId);
 
+        if ($request->user()->role === 'creator' && $course->user_id !== $request->user()->id) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized'], 403);
+        }
+
         $request->validate([
             'title' => 'required|string|max:255',
             'order' => 'nullable|integer',
@@ -39,6 +43,11 @@ class CourseSectionController extends Controller
      */
     public function update(Request $request, $courseId, $sectionId)
     {
+        $course = Course::findOrFail($courseId);
+        if ($request->user()->role === 'creator' && $course->user_id !== $request->user()->id) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized'], 403);
+        }
+
         $section = CourseSection::where('course_id', $courseId)->findOrFail($sectionId);
 
         $request->validate([
@@ -61,8 +70,13 @@ class CourseSectionController extends Controller
     /**
      * HAPUS SECTION (cascade delete lessons)
      */
-    public function destroy($courseId, $sectionId)
+    public function destroy(Request $request, $courseId, $sectionId)
     {
+        $course = Course::findOrFail($courseId);
+        if ($request->user()->role === 'creator' && $course->user_id !== $request->user()->id) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized'], 403);
+        }
+
         $section = CourseSection::where('course_id', $courseId)->findOrFail($sectionId);
         $section->delete();
 

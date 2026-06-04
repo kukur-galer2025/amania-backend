@@ -16,7 +16,7 @@ class User extends Authenticatable
         'email',
         'phone',     // 🔥 Kolom Nomor HP ditambahkan
         'password',
-        'role',      // superadmin, organizer, user
+        'role',      // superadmin, user
         'avatar',    // Kolom foto
         'bio',       // Kolom bio
         'google_id', // Mengizinkan penyimpanan ID Google

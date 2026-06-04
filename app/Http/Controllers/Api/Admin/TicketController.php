@@ -18,13 +18,7 @@ class TicketController extends Controller
                     ->where('status', 'verified')
                     ->whereNotNull('ticket_code');
 
-        // 🔥 PROTEKSI MULTI-TENANT 🔥
-        if ($currentUser->role === 'organizer') {
-            $queryEvent->where('user_id', $currentUser->id);
-            $queryTicket->whereHas('event', function($q) use ($currentUser) {
-                $q->where('user_id', $currentUser->id);
-            });
-        }
+
 
         $events = $queryEvent->get();
 
@@ -67,10 +61,7 @@ class TicketController extends Controller
             return response()->json(['success' => false, 'message' => 'Event tidak valid.'], 404);
         }
 
-        // 🔥 PROTEKSI SCAN: Mencegah Organizer menjaga/scan pintu event orang lain
-        if ($currentUser->role === 'organizer' && $eventToCheck->user_id !== $currentUser->id) {
-            return response()->json(['success' => false, 'message' => 'Akses ditolak. Ini bukan event Anda.'], 403);
-        }
+
 
         $ticket = Registration::with(['user:id,name,email', 'event:id,title,start_time'])
                     ->where('ticket_code', $request->ticket_code)

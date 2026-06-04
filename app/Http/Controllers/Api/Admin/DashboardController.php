@@ -17,12 +17,7 @@ class DashboardController extends Controller
         // Siapkan base query untuk Registrasi
         $regQuery = Registration::query();
 
-        // 🔥 PROTEKSI MULTI-TENANT 🔥
-        if ($currentUser->role === 'organizer') {
-            $regQuery->whereHas('event', function ($q) use ($currentUser) {
-                $q->where('user_id', $currentUser->id);
-            });
-        }
+
 
         // 1. Hitung Total Pendapatan
         $totalPendapatan = (clone $regQuery)->where('status', 'verified')->sum('total_amount');
@@ -35,12 +30,7 @@ class DashboardController extends Controller
 
         // 4. Hitung Total Peserta
         // - Superadmin: Lihat semua user yang role-nya 'user'
-        // - Organizer: Hanya hitung peserta unik yang pernah daftar di event-nya
-        if ($currentUser->role === 'superadmin') {
-            $totalPeserta = User::where('role', 'user')->count();
-        } else {
-            $totalPeserta = (clone $regQuery)->distinct('user_id')->count('user_id');
-        }
+        $totalPeserta = User::where('role', 'user')->count();
 
         // 5. Ambil 5 Pendaftaran Terbaru
         $recentRegistrations = (clone $regQuery)
@@ -58,9 +48,30 @@ class DashboardController extends Controller
                 ];
             });
 
+        // Jika Creator, stats berbeda
+        if ($currentUser->role === 'creator') {
+            $totalCourses = \App\Models\Course::where('user_id', $currentUser->id)->count();
+            $totalEproducts = \App\Models\EProduct::where('user_id', $currentUser->id)->count();
+            
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'is_creator' => true,
+                    'total_courses' => $totalCourses,
+                    'total_eproducts' => $totalEproducts,
+                    'total_pendapatan' => 0,
+                    'total_peserta' => 0,
+                    'tiket_terjual' => 0,
+                    'menunggu_verifikasi' => 0,
+                    'recent_registrations' => []
+                ]
+            ]);
+        }
+
         return response()->json([
             'success' => true,
             'data' => [
+                'is_creator' => false,
                 'total_pendapatan' => $totalPendapatan,
                 'total_peserta' => $totalPeserta,
                 'tiket_terjual' => $tiketTerjual,

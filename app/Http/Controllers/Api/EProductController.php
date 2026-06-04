@@ -14,7 +14,7 @@ class EProductController extends Controller
     public function index(Request $request)
     {
         $query = EProduct::where('is_published', true)
-            ->with(['author:id,name', 'category:id,name']) 
+            ->with(['author:id,name,avatar,role', 'category:id,name']) 
             ->withAvg('reviews', 'rating')
             ->withCount('reviews')
             ->latest();
@@ -52,7 +52,7 @@ class EProductController extends Controller
     {
         $product = EProduct::where('slug', $slug)
             ->where('is_published', true)
-            ->with(['author:id,name', 'reviews.user:id,name,avatar', 'category:id,name'])
+            ->with(['author:id,name,avatar,role', 'reviews.user:id,name,avatar', 'category:id,name'])
             ->withCount('materials')
             ->withAvg('reviews', 'rating')
             ->withCount('reviews')
@@ -130,7 +130,7 @@ class EProductController extends Controller
         // 🔥 AMBIL DATA DARI TABEL ORDER ITEMS KARENA STRUKTUR LAMA SUDAH DIUBAH 🔥
         $orderItems = EProductOrderItem::with([
                 'product.category:id,name',
-                'product.author:id,name', 
+                'product.author:id,name,avatar,role', 
                 'product.materials'
             ])
             ->whereHas('purchase', function($q) use ($request) {
@@ -160,7 +160,7 @@ class EProductController extends Controller
         // 🔥 UPDATE RELASI: Ambil Invoice beserta daftar items (produk-produk di dalamnya) 🔥
         $transactions = EProductPurchase::with([
                 'items.product', 
-                'items.product.author:id,name', 
+                'items.product.author:id,name,avatar,role', 
                 'items.product.category:id,name'
             ])
             ->where('user_id', $request->user()->id)
@@ -178,7 +178,7 @@ class EProductController extends Controller
         // 🔥 CARI PRODUK DI TABEL ORDER ITEMS YANG INVOICENYA LUNAS 🔥
         $orderItem = EProductOrderItem::with([
                 'product.category:id,name',
-                'product.author:id,name',
+                'product.author:id,name,avatar,role',
                 'product.materials'
             ])
             ->whereHas('purchase', function($q) use ($request) {

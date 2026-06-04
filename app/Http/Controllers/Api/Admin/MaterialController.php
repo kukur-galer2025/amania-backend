@@ -27,13 +27,7 @@ class MaterialController extends Controller
         $currentUser = $request->user();
         $event = Event::findOrFail($validated['event_id']);
 
-        // 🔥 PROTEKSI MULTI-TENANT 🔥
-        if ($currentUser->role === 'organizer' && $event->user_id !== $currentUser->id) {
-            return response()->json([
-                'success' => false, 
-                'message' => 'Akses ditolak. Anda tidak bisa menambahkan materi ke event ini.'
-            ], 403);
-        }
+
 
         $data = [
             'event_id' => $validated['event_id'],
@@ -73,13 +67,7 @@ class MaterialController extends Controller
         $currentUser = $request->user();
         $material = Material::with('event')->findOrFail($id);
 
-        // 🔥 PROTEKSI MULTI-TENANT 🔥
-        if ($currentUser->role === 'organizer' && $material->event->user_id !== $currentUser->id) {
-            return response()->json([
-                'success' => false, 
-                'message' => 'Akses ditolak. Ini bukan materi dari event Anda.'
-            ], 403);
-        }
+
 
         if ($material->type === 'file' && $material->file_path) {
             if (Storage::disk('public')->exists($material->file_path)) {

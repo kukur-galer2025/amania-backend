@@ -147,8 +147,11 @@ class CourseController extends Controller
             ->where('course_id', $course->id)
             ->whereIn('status', ['PAID', 'success', 'SETTLED'])
             ->exists();
+            
+        $isCreator = $course->user_id === $user->id;
+        $isSuperadmin = $user->role === 'superadmin';
 
-        if (!$isEnrolled) {
+        if (!$isEnrolled && !$isCreator && !$isSuperadmin) {
             return response()->json([
                 'success' => false,
                 'message' => 'Anda belum memiliki akses ke kursus ini.'
@@ -162,6 +165,12 @@ class CourseController extends Controller
             ->where('is_completed', true)
             ->pluck('course_lesson_id');
 
+        $certificate = \App\Models\CourseCertificate::where('user_id', $user->id)
+            ->where('course_id', $course->id)
+            ->first();
+
+        $hasExam = \App\Models\CourseExam::where('course_id', $course->id)->exists();
+
         // Return flat structure matching LearnClient.tsx expectations
         return response()->json([
             'success' => true,
@@ -171,6 +180,8 @@ class CourseController extends Controller
                 'sections'          => $course->sections,
                 'instructor'        => $course->instructor,
                 'completed_lessons' => $completedLessonIds,
+                'certificate'       => $certificate,
+                'has_exam'          => $hasExam,
             ]
         ]);
     }
@@ -194,8 +205,11 @@ class CourseController extends Controller
             ->where('course_id', $lesson->section->course->id)
             ->whereIn('status', ['PAID', 'success', 'SETTLED'])
             ->exists();
+            
+        $isCreator = $lesson->section->course->user_id === $user->id;
+        $isSuperadmin = $user->role === 'superadmin';
 
-        if (!$isEnrolled) {
+        if (!$isEnrolled && !$isCreator && !$isSuperadmin) {
             return response()->json(['success' => false, 'message' => 'Akses ditolak.'], 403);
         }
 
@@ -229,8 +243,11 @@ class CourseController extends Controller
             ->where('course_id', $lesson->section->course->id)
             ->whereIn('status', ['PAID', 'success', 'SETTLED'])
             ->exists();
+            
+        $isCreator = $lesson->section->course->user_id === $user->id;
+        $isSuperadmin = $user->role === 'superadmin';
 
-        if (!$isEnrolled) {
+        if (!$isEnrolled && !$isCreator && !$isSuperadmin) {
             return response()->json(['success' => false, 'message' => 'Akses ditolak.'], 403);
         }
 
@@ -239,10 +256,86 @@ class CourseController extends Controller
             ['is_completed' => true]
         );
 
+        $courseId = $lesson->section->course->id;
+        $course = $lesson->section->course;
+        
+        // Check for 100% completion
+        $allLessonIds = $course->sections->flatMap(fn($s) => $s->lessons->pluck('id'));
+        $completedCount = CourseLessonProgress::where('user_id', $user->id)
+            ->whereIn('course_lesson_id', $allLessonIds)
+            ->where('is_completed', true)
+            ->count();
+            
+        if ($completedCount === $allLessonIds->count() && $allLessonIds->count() > 0) {
+            // Cek apakah kursus punya ujian
+            $exam = \App\Models\CourseExam::where('course_id', $courseId)->first();
+            
+            // Jika tidak ada ujian, atau jika ada ujian dan sudah lulus, berikan sertifikat
+            $canGetCertificate = true;
+            if ($exam) {
+                $passedExam = \App\Models\ExamAttempt::where('user_id', $user->id)
+                    ->where('course_exam_id', $exam->id)
+                    ->where('is_passed', true)
+                    ->exists();
+                if (!$passedExam) $canGetCertificate = false;
+            }
+
+            if ($canGetCertificate) {
+                \App\Models\CourseCertificate::firstOrCreate(
+                    ['user_id' => $user->id, 'course_id' => $courseId],
+                    [
+                        'certificate_code' => 'AMN-' . strtoupper(uniqid()) . '-' . $user->id,
+                        'issued_at' => now()
+                    ]
+                );
+            }
+        }
+
         return response()->json([
             'success' => true,
             'message' => 'Progress berhasil disimpan.'
         ]);
+    }
+
+    // =========================================================================
+    // 7.5. DOWNLOAD SERTIFIKAT (MEMBER)
+    // =========================================================================
+    public function downloadCertificate(Request $request, $slug)
+    {
+        // Support both: auth:sanctum middleware OR ?token= query param (for <a target="_blank">)
+        $user = $request->user();
+        if (!$user && $request->query('token')) {
+            $token = \Laravel\Sanctum\PersonalAccessToken::findToken($request->query('token'));
+            if ($token) {
+                $user = $token->tokenable;
+            }
+        }
+
+        if (!$user) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized.'], 401);
+        }
+        $course = Course::where('slug', $slug)->firstOrFail();
+
+        $certificate = \App\Models\CourseCertificate::where('user_id', $user->id)
+            ->where('course_id', $course->id)
+            ->first();
+
+        if (!$certificate) {
+            return response()->json(['success' => false, 'message' => 'Sertifikat belum tersedia.'], 404);
+        }
+
+        $totalMinutes = \App\Models\CourseLesson::whereHas('section', function($q) use ($course) {
+            $q->where('course_id', $course->id);
+        })->sum('duration_minutes');
+
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('pdf.certificate', [
+            'user' => $user,
+            'course' => $course,
+            'certificate' => $certificate,
+            'totalMinutes' => $totalMinutes
+        ])->setPaper('a4', 'landscape');
+
+        return $pdf->stream('Sertifikat-' . $course->slug . '.pdf');
     }
 
     // =========================================================================

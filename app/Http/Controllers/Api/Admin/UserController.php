@@ -36,7 +36,7 @@ class UserController extends Controller
             'email' => 'required|email|unique:users,email',
             'phone' => 'nullable|string|max:20', // Opsional, tambahkan phone
             'password' => 'required|string|min:6',
-            'role' => 'required|in:superadmin,organizer,user',
+            'role' => 'required|in:superadmin,user,creator',
             'avatar' => 'nullable|image|mimes:jpeg,png,jpg,webp|max:5120' // Maksimal 5MB
         ]);
 
@@ -68,7 +68,7 @@ class UserController extends Controller
             'name' => 'required|string|max:255',
             'email' => 'required|email|unique:users,email,' . $user->id,
             'phone' => 'nullable|string|max:20', // Opsional, tambahkan phone
-            'role' => 'required|in:superadmin,organizer,user',
+            'role' => 'required|in:superadmin,user,creator',
             'password' => 'nullable|string|min:6', 
             'avatar' => 'nullable|image|mimes:jpeg,png,jpg,webp|max:5120' // Maks 5MB
         ]);

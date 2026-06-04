@@ -19,12 +19,7 @@ class RegistrationController extends Controller
         $currentUser = $request->user();
         $query = Registration::with(['event', 'user']);
 
-        // LOGIKA MULTI-TENANT: ORGANIZER HANYA LIHAT EVENT MILIKNYA
-        if ($currentUser->role === 'organizer') {
-            $query->whereHas('event', function ($q) use ($currentUser) {
-                $q->where('user_id', $currentUser->id);
-            });
-        }
+
 
         if ($request->has('event_id') && $request->event_id != 'all') {
             $query->where('event_id', $request->event_id);
@@ -56,12 +51,7 @@ class RegistrationController extends Controller
         $currentUser = $request->user();
         $reg = Registration::with(['event', 'user'])->findOrFail($id);
 
-        if ($currentUser->role === 'organizer' && $reg->event->user_id !== $currentUser->id) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Akses ditolak. Anda bukan penyelenggara program ini.'
-            ], 403);
-        }
+
 
         if ($reg->status === 'verified') {
             return response()->json([
@@ -108,12 +98,7 @@ class RegistrationController extends Controller
         $currentUser = $request->user();
         $reg = Registration::with(['event', 'user'])->findOrFail($id);
 
-        if ($currentUser->role === 'organizer' && $reg->event->user_id !== $currentUser->id) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Akses ditolak. Anda bukan penyelenggara program ini.'
-            ], 403);
-        }
+
 
         if ($reg->status === 'verified') {
              return response()->json([
@@ -147,12 +132,7 @@ class RegistrationController extends Controller
         $currentUser = $request->user();
         $reg = Registration::with(['event'])->findOrFail($id);
         
-        if ($currentUser->role === 'organizer' && $reg->event->user_id !== $currentUser->id) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Akses ditolak. Anda bukan penyelenggara program ini.'
-            ], 403);
-        }
+
 
         if ($reg->status === 'pending') {
              return response()->json([
