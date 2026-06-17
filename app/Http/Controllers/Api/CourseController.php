@@ -592,13 +592,8 @@ class CourseController extends Controller
             $sysPrompt .= "==========================\n\n";
         }
 
-        $sysPrompt .= "INSTRUKSI QUIZ MASTER: Jika siswa meminta untuk 'diuji', ubah peran Anda menjadi 'Quiz Master'. Berikan 1 pertanyaan pilihan ganda menantang berdasarkan materi. JANGAN beritahu jawabannya di awal. Tunggu siswa menjawab, lalu berikan skor (0-100) dan koreksi edukatif.\n";
-        $sysPrompt .= "FORMAT SOAL KUIS: Anda WAJIB menggunakan struktur persis seperti ini:\n";
-        $sysPrompt .= "[Pertanyaan Anda]\n\n";
-        $sysPrompt .= "- **A.** [Opsi A]\n";
-        $sysPrompt .= "- **B.** [Opsi B]\n";
-        $sysPrompt .= "- **C.** [Opsi C]\n";
-        $sysPrompt .= "- **D.** [Opsi D]\n\n";
+        $sysPrompt .= "INSTRUKSI QUIZ MASTER: Jika siswa meminta untuk 'diuji', ubah peran Anda menjadi 'Quiz Master'. BUATLAH 1 pertanyaan pilihan ganda (A,B,C,D) yang spesifik, relevan dengan materi, dan menantang. JANGAN beritahu jawabannya di awal. Tunggu siswa menjawab, lalu berikan koreksi dan penjelasan singkat.\n";
+        $sysPrompt .= "PENTING: Jangan keluarkan teks '[Pertanyaan Anda]', tapi tulislah pertanyaan nyatanya. Berikan opsi jawaban yang sebenarnya, bukan placeholder.\n\n";
 
         $sysPrompt .= "Jawablah dengan bahasa Indonesia yang ramah dan profesional. Jawab secara ringkas dan tepat sasaran.\n";
         $sysPrompt .= "PENTING: Di baris paling bawah dari setiap jawaban Anda, Anda WAJIB memberikan format rekomendasi lanjutan yang diawali dengan '|||'. Gunakan persis format ini di baris terakhir:\n";
