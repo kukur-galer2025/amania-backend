@@ -755,6 +755,11 @@ class CourseController extends Controller
         $url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:streamGenerateContent?alt=sse&key=' . $geminiApiKey;
 
         return response()->stream(function () use ($url, $payload) {
+            // Bypass reverse proxy buffering (Nginx, Cloudflare)
+            echo ":" . str_repeat(" ", 2048) . "\n\n";
+            if (ob_get_level() > 0) ob_flush();
+            flush();
+
             $ch = curl_init();
             curl_setopt($ch, CURLOPT_URL, $url);
             curl_setopt($ch, CURLOPT_POST, 1);
@@ -770,7 +775,7 @@ class CourseController extends Controller
                         if (isset($json['candidates'][0]['content']['parts'][0]['text'])) {
                             $chunkText = $json['candidates'][0]['content']['parts'][0]['text'];
                             echo "data: " . json_encode(['chunk' => $chunkText]) . "\n\n";
-                            ob_flush();
+                            if (ob_get_level() > 0) ob_flush();
                             flush();
                         }
                     }
@@ -782,13 +787,14 @@ class CourseController extends Controller
             curl_close($ch);
 
             echo "data: [DONE]\n\n";
-            ob_flush();
+            if (ob_get_level() > 0) ob_flush();
             flush();
 
         }, 200, [
             'Cache-Control' => 'no-cache',
             'Content-Type' => 'text/event-stream',
-            'X-Accel-Buffering' => 'no'
+            'X-Accel-Buffering' => 'no',
+            'Connection' => 'keep-alive'
         ]);
     }
 }
