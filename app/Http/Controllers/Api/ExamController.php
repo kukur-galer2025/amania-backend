@@ -35,8 +35,8 @@ class ExamController extends Controller
             // Jangan select 'correct_option' agar siswa tidak bisa curang
         }])->where('course_id', $course->id)->first();
 
-        if (!$exam) {
-            return response()->json(['success' => false, 'message' => 'Ujian tidak tersedia.'], 404);
+        if (!$exam || $exam->questions->isEmpty()) {
+            return response()->json(['success' => false, 'message' => 'Ujian tidak tersedia atau belum memiliki soal.'], 404);
         }
 
         // Cek apakah sudah pernah mencoba ujian ini
@@ -83,20 +83,58 @@ class ExamController extends Controller
         }
 
         $correctCount = 0;
+        $wrongQuestions = [];
         foreach ($exam->questions as $question) {
             if (isset($answers[$question->id]) && $answers[$question->id] === $question->correct_option) {
                 $correctCount++;
+            } else {
+                $wrongQuestions[] = $question->question_text;
             }
         }
 
         $score = (int) round(($correctCount / $totalQuestions) * 100);
         $isPassed = $score >= $exam->passing_score;
 
+        $aiFeedback = null;
+        try {
+            $geminiApiKey = env('GEMINI_API_KEY');
+            if ($geminiApiKey) {
+                $prompt = "Seorang siswa bernama {$user->name} baru saja menyelesaikan ujian untuk kursus '{$course->title}'. Dia mendapatkan skor {$score}/100.\n";
+                if (count($wrongQuestions) > 0) {
+                    $prompt .= "Dia menjawab salah pada materi/pertanyaan berikut:\n";
+                    foreach($wrongQuestions as $idx => $wq) {
+                        $prompt .= "- " . $wq . "\n";
+                    }
+                    $prompt .= "\nBerikan evaluasi personal dan rekomendasi belajar untuknya secara ramah (maksimal 2 paragraf pendek). Bertindaklah sebagai AI Mentor.";
+                } else {
+                    $prompt .= "Siswa tersebut mendapatkan nilai sempurna. Berikan pujian dan motivasi yang sangat antusias (maksimal 2 paragraf pendek). Bertindaklah sebagai AI Mentor.";
+                }
+
+                $response = \Illuminate\Support\Facades\Http::withHeaders([
+                    'Content-Type' => 'application/json',
+                ])->post('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=' . $geminiApiKey, [
+                    'contents' => [
+                        ['parts' => [['text' => $prompt]]]
+                    ]
+                ]);
+
+                if ($response->successful()) {
+                    $json = $response->json();
+                    if (isset($json['candidates'][0]['content']['parts'][0]['text'])) {
+                        $aiFeedback = $json['candidates'][0]['content']['parts'][0]['text'];
+                    }
+                }
+            }
+        } catch (\Exception $e) {
+            // Ignore AI failure, proceed to save attempt
+        }
+
         $attempt = ExamAttempt::create([
             'user_id' => $user->id,
             'course_exam_id' => $exam->id,
             'score' => $score,
-            'is_passed' => $isPassed
+            'is_passed' => $isPassed,
+            'ai_feedback' => $aiFeedback
         ]);
 
         // Jika lulus, generate sertifikat JIKA progres video juga sudah 100%
@@ -127,7 +165,8 @@ class ExamController extends Controller
                 'score' => $score,
                 'is_passed' => $isPassed,
                 'passing_score' => $exam->passing_score,
-                'certificate_created' => $certificateCreated
+                'certificate_created' => $certificateCreated,
+                'ai_feedback' => $aiFeedback
             ]
         ]);
     }

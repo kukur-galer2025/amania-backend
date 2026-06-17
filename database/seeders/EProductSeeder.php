@@ -74,39 +74,10 @@ class EProductSeeder extends Seeder
                 'description'  => '<p>' . $data['description'] . '</p>',
                 'price'        => $data['price'],
                 'cover_image'  => null, // Kosongkan dulu, atau isi dengan path gambar jika sudah ada
-                'file_path'    => 'dummy/file-' . Str::random(5) . '.pdf',
+
                 'is_published' => true,
             ]);
 
-            // Ambil 3-4 pembeli acak untuk produk ini
-            $randomBuyers = $faker->randomElements($buyers, rand(3, 4));
-
-            foreach ($randomBuyers as $buyer) {
-                // Tentukan status acak (Banyakan PAID agar ada review-nya)
-                $status = $data['price'] == 0 ? 'PAID' : $faker->randomElement(['PAID', 'UNPAID', 'PAID', 'PAID']);
-
-                // Buat Riwayat Pembelian
-                EProductPurchase::create([
-                    'reference'        => 'INV-EP-' . strtoupper(Str::random(8)) . '-' . $buyer->id,
-                    'tripay_reference' => $status === 'PAID' && $data['price'] > 0 ? 'DEV-T' . strtoupper(Str::random(10)) : null,
-                    'user_id'          => $buyer->id,
-                    'e_product_id'     => $product->id,
-                    'amount'           => $data['price'],
-                    'checkout_url'     => $status === 'UNPAID' ? 'https://tripay.co.id/checkout/dummy' : null,
-                    'status'           => $status,
-                ]);
-
-                // Buat Ulasan (Review) HANYA jika statusnya PAID
-                if ($status === 'PAID') {
-                    EProductReview::create([
-                        'e_product_id' => $product->id,
-                        'user_id'      => $buyer->id,
-                        // Kasih rating bagus (4 atau 5)
-                        'rating'       => $faker->numberBetween(4, 5), 
-                        'review'       => $faker->sentence(rand(6, 12)) . ' ' . $faker->randomElement(['Sangat bermanfaat!', 'Terima kasih Amania.', 'Mantap materinya.']),
-                    ]);
-                }
-            }
         }
     }
 }

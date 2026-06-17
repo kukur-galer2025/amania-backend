@@ -7,6 +7,8 @@ use App\Models\Course;
 use App\Models\CourseEnrollment;
 use App\Models\CourseLessonProgress;
 use App\Models\CourseReview;
+use App\Models\EProduct;
+use App\Models\Event;
 use Illuminate\Http\Request;
 
 class CourseController extends Controller
@@ -169,7 +171,9 @@ class CourseController extends Controller
             ->where('course_id', $course->id)
             ->first();
 
-        $hasExam = \App\Models\CourseExam::where('course_id', $course->id)->exists();
+        $hasExam = \App\Models\CourseExam::where('course_id', $course->id)
+            ->whereHas('questions')
+            ->exists();
 
         // Return flat structure matching LearnClient.tsx expectations
         return response()->json([
@@ -429,6 +433,362 @@ class CourseController extends Controller
             'data'       => $reviews,
             'avg_rating' => round((float) $avgRating, 1),
             'total'      => $reviews->count(),
+        ]);
+    }
+
+    // =========================================================================
+    // 11. AI MENTOR
+    // =========================================================================
+    
+    public function clearMentorChats(Request $request, $lessonId)
+    {
+        $user = $request->user();
+        \App\Models\AiMentorChat::where('user_id', $user->id)
+            ->where('lesson_id', $lessonId)
+            ->delete();
+
+        return response()->json(['success' => true, 'message' => 'Chat history cleared.']);
+    }
+    public function getMentorChats(Request $request, $lessonId)
+    {
+        $user = $request->user();
+        $lesson = \App\Models\CourseLesson::with('section.course')->findOrFail($lessonId);
+
+        // Check enrollment
+        $isEnrolled = CourseEnrollment::where('user_id', $user->id)
+            ->where('course_id', $lesson->section->course->id)
+            ->whereIn('status', ['PAID', 'success', 'SETTLED'])
+            ->exists();
+
+        $isCreator = $lesson->section->course->user_id === $user->id;
+        $isSuperadmin = $user->role === 'superadmin';
+
+        if (!$isEnrolled && !$isCreator && !$isSuperadmin) {
+            return response()->json(['success' => false, 'message' => 'Akses ditolak.'], 403);
+        }
+
+        $chats = \App\Models\AiMentorChat::where('user_id', $user->id)
+            ->where('lesson_id', $lessonId)
+            ->orderBy('created_at', 'asc')
+            ->get(['role', 'content']);
+
+        return response()->json(['success' => true, 'data' => $chats]);
+    }
+
+    public function askMentor(Request $request, $lessonId)
+    {
+        $request->validate([
+            'question' => 'required|string|max:2000'
+        ]);
+
+        $user = $request->user();
+        $lesson = \App\Models\CourseLesson::with('section.course')->findOrFail($lessonId);
+
+        // Check enrollment
+        $isEnrolled = CourseEnrollment::where('user_id', $user->id)
+            ->where('course_id', $lesson->section->course->id)
+            ->whereIn('status', ['PAID', 'success', 'SETTLED'])
+            ->exists();
+
+        $isCreator = $lesson->section->course->user_id === $user->id;
+        $isSuperadmin = $user->role === 'superadmin';
+
+        if (!$isEnrolled && !$isCreator && !$isSuperadmin) {
+            return response()->json(['success' => false, 'message' => 'Akses ditolak.'], 403);
+        }
+
+        $question = $request->input('question');
+        $geminiApiKey = config('services.gemini.key', env('GEMINI_API_KEY'));
+
+        // Simpan Chat User ke DB
+        \App\Models\AiMentorChat::create([
+            'user_id' => $user->id,
+            'lesson_id' => $lessonId,
+            'role' => 'user',
+            'content' => $question
+        ]);
+
+        if (!$geminiApiKey) {
+            $reply = "API Key Gemini belum diatur. Mohon hubungi admin.";
+            
+            \App\Models\AiMentorChat::create([
+                'user_id' => $user->id,
+                'lesson_id' => $lessonId,
+                'role' => 'model',
+                'content' => $reply
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'reply' => $reply
+                ]
+            ]);
+        }
+
+        // Ambil riwayat chat sebelumnya (maksimal 10 percakapan terakhir)
+        $history = \App\Models\AiMentorChat::where('user_id', $user->id)
+            ->where('lesson_id', $lessonId)
+            ->orderBy('created_at', 'desc') // Ambil terbaru
+            ->take(10)
+            ->get()
+            ->reverse(); // Urutkan kembali menjadi terlama ke terbaru
+
+        $contents = [];
+        foreach ($history as $chat) {
+            $contents[] = [
+                'role' => $chat->role,
+                'parts' => [['text' => $chat->content]]
+            ];
+        }
+
+        // RAG (Knowledge Retrieval) & System Prompt
+        $sysPrompt = "Anda adalah 'AI Mentor' di platform e-learning Amania.\n";
+        $sysPrompt .= "Tugas Anda adalah mendampingi siswa memahami materi '{$lesson->title}' pada kursus '{$lesson->section->course->title}'.\n";
+        $sysPrompt .= "Gunakan metode Socratic (membimbing, tidak selalu langsung memberikan jawaban akhir).\n\n";
+        
+        $sysPrompt .= "=== REFERENSI MATERI ===\n";
+        if (!empty($lesson->description)) {
+            $sysPrompt .= "Ringkasan:\n" . strip_tags($lesson->description) . "\n\n";
+        }
+        if (!empty($lesson->text_content)) {
+            $sysPrompt .= "Isi Materi:\n" . strip_tags($lesson->text_content) . "\n\n";
+        }
+        $sysPrompt .= "========================\n\n";
+        
+        if ($lesson->type === 'video' && !empty($lesson->youtube_url)) {
+            $sysPrompt .= "Catatan Tambahan: Materi ini berbentuk video YouTube. Tautan video: " . $lesson->youtube_url . "\n";
+            $sysPrompt .= "Jika siswa meminta Anda merangkum materi atau menjelaskan isi video ini, Anda HARUS merangkum berdasarkan TRANSCRIPT (Ucapan Asli dalam Video) berikut:\n\n";
+            $sysPrompt .= "=== YOUTUBE TRANSCRIPT ===\n";
+
+            if (preg_match('/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/i', $lesson->youtube_url, $match)) {
+                $videoId = $match[1];
+                try {
+                    $client = new \GuzzleHttp\Client();
+                    $requestFactory = new \GuzzleHttp\Psr7\HttpFactory();
+                    $streamFactory = new \GuzzleHttp\Psr7\HttpFactory();
+                    $fetcher = new \MrMySQL\YoutubeTranscript\TranscriptListFetcher($client, $requestFactory, $streamFactory);
+                    
+                    $transcriptList = $fetcher->fetch($videoId);
+                    $langCodes = $transcriptList->getAvailableLanguageCodes();
+                    $transcript = $transcriptList->findTranscript($langCodes);
+                    $transcriptData = $transcript->fetch();
+                    
+                    $fullTranscript = '';
+                    foreach ($transcriptData as $item) {
+                        $fullTranscript .= $item['text'] . ' ';
+                    }
+                    
+                    if (strlen($fullTranscript) > 15000) {
+                        $fullTranscript = substr($fullTranscript, 0, 15000) . "... [transcript dipotong]";
+                    }
+                    $sysPrompt .= $fullTranscript . "\n";
+                } catch (\Exception $e) {
+                    $sysPrompt .= "(Transcript gagal ditarik otomatis. Silakan andalkan Ringkasan teks materi di atas untuk merangkum).\n";
+                }
+            } else {
+                $sysPrompt .= "(Format link YouTube tidak dikenali).\n";
+            }
+            $sysPrompt .= "==========================\n\n";
+        }
+
+        $sysPrompt .= "INSTRUKSI QUIZ MASTER: Jika siswa meminta untuk 'diuji', ubah peran Anda menjadi 'Quiz Master'. Berikan 1 pertanyaan pilihan ganda menantang berdasarkan materi. JANGAN beritahu jawabannya di awal. Tunggu siswa menjawab, lalu berikan skor (0-100) dan koreksi edukatif.\n";
+        $sysPrompt .= "FORMAT SOAL KUIS: Anda WAJIB menggunakan struktur persis seperti ini:\n";
+        $sysPrompt .= "[Pertanyaan Anda]\n\n";
+        $sysPrompt .= "- **A.** [Opsi A]\n";
+        $sysPrompt .= "- **B.** [Opsi B]\n";
+        $sysPrompt .= "- **C.** [Opsi C]\n";
+        $sysPrompt .= "- **D.** [Opsi D]\n\n";
+
+        $sysPrompt .= "Jawablah dengan bahasa Indonesia yang ramah dan profesional. Jawab secara ringkas dan tepat sasaran.\n";
+        $sysPrompt .= "PENTING: Di baris paling bawah dari setiap jawaban Anda, Anda WAJIB memberikan format rekomendasi lanjutan yang diawali dengan '|||'. Gunakan persis format ini di baris terakhir:\n";
+        $sysPrompt .= "Jika Anda baru saja memberikan soal kuis pilihan ganda, WAJIB tuliskan persis ini di baris terakhir: |||Jawaban A|Jawaban B|Jawaban C|Jawaban D\n";
+        $sysPrompt .= "Jika percakapan biasa (bukan soal kuis), tuliskan 3 contoh pertanyaan lanjutan: |||Pertanyaan 1|Pertanyaan 2|Pertanyaan 3\n";
+
+        $payload = [
+            'system_instruction' => [
+                'parts' => ['text' => $sysPrompt]
+            ],
+            'contents' => $contents
+        ];
+
+        $url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:streamGenerateContent?alt=sse&key=' . $geminiApiKey;
+
+        return response()->stream(function () use ($url, $payload, $user, $lessonId) {
+            $ch = curl_init();
+            curl_setopt($ch, CURLOPT_URL, $url);
+            curl_setopt($ch, CURLOPT_POST, 1);
+            curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
+            curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
+            
+            $fullText = "";
+
+            curl_setopt($ch, CURLOPT_WRITEFUNCTION, function($ch, $data) use (&$fullText) {
+                $lines = explode("\n", $data);
+                foreach ($lines as $line) {
+                    if (strpos($line, 'data: ') === 0) {
+                        $jsonStr = substr($line, 6);
+                        $json = json_decode($jsonStr, true);
+                        if (isset($json['candidates'][0]['content']['parts'][0]['text'])) {
+                            $chunkText = $json['candidates'][0]['content']['parts'][0]['text'];
+                            $fullText .= $chunkText;
+                            
+                            echo "data: " . json_encode(['chunk' => $chunkText]) . "\n\n";
+                            ob_flush();
+                            flush();
+                        }
+                    }
+                }
+                return strlen($data);
+            });
+
+            curl_exec($ch);
+            curl_close($ch);
+
+            if (!empty($fullText)) {
+                \App\Models\AiMentorChat::create([
+                    'user_id' => $user->id,
+                    'lesson_id' => $lessonId,
+                    'role' => 'model',
+                    'content' => $fullText
+                ]);
+            }
+            
+            echo "data: [DONE]\n\n";
+            ob_flush();
+            flush();
+
+        }, 200, [
+            'Cache-Control' => 'no-cache',
+            'Content-Type' => 'text/event-stream',
+            'X-Accel-Buffering' => 'no'
+        ]);
+    }
+
+    // =========================================================================
+    // 12. AI COURSE ADVISOR (GLOBAL)
+    // =========================================================================
+    public function askCourseAdvisor(Request $request)
+    {
+        $request->validate([
+            'messages' => 'required|array'
+        ]);
+
+        $geminiApiKey = config('services.gemini.api_key') ?? env('GEMINI_API_KEY');
+        if (!$geminiApiKey) {
+            return response()->json(['error' => 'Gemini API key not configured'], 500);
+        }
+
+        // Fetch all published courses
+        $courses = Course::where('is_published', true)
+            ->with('category:id,name')
+            ->get(['id', 'title', 'slug', 'level', 'price', 'description', 'course_category_id'])
+            ->map(function($course) {
+                return [
+                    'type' => 'Course (Kursus Online)',
+                    'title' => $course->title,
+                    'slug' => '/courses/' . $course->slug,
+                    'level' => $course->level,
+                    'price' => $course->price == 0 ? 'Gratis' : 'Rp ' . number_format($course->price, 0, ',', '.'),
+                    'category' => $course->category->name ?? 'Uncategorized',
+                    'description' => substr(strip_tags($course->description), 0, 200) . '...'
+                ];
+            });
+
+        // Fetch all published E-Products
+        $eproducts = EProduct::where('is_published', true)
+            ->with('category:id,name')
+            ->get(['id', 'title', 'slug', 'price', 'description', 'e_product_category_id'])
+            ->map(function($ep) {
+                return [
+                    'type' => 'E-Product (Buku/Template/Materi)',
+                    'title' => $ep->title,
+                    'slug' => '/e-products/' . $ep->slug,
+                    'price' => $ep->price == 0 ? 'Gratis' : 'Rp ' . number_format($ep->price, 0, ',', '.'),
+                    'category' => $ep->category->name ?? 'Uncategorized',
+                    'description' => substr(strip_tags($ep->description), 0, 200) . '...'
+                ];
+            });
+
+        // Fetch all active Events (upcoming webinars)
+        $events = Event::where('start_time', '>=', now())
+            ->get(['id', 'title', 'slug', 'basic_price', 'description', 'start_time'])
+            ->map(function($event) {
+                return [
+                    'type' => 'Webinar / Event Live',
+                    'title' => $event->title,
+                    'slug' => '/events/' . $event->slug,
+                    'price' => $event->basic_price == 0 ? 'Gratis' : 'Rp ' . number_format($event->basic_price, 0, ',', '.'),
+                    'start_time' => $event->start_time ? $event->start_time->format('Y-m-d H:i') : null,
+                    'description' => substr(strip_tags($event->description), 0, 200) . '...'
+                ];
+            });
+
+        $allCatalog = array_merge($courses->toArray(), $eproducts->toArray(), $events->toArray());
+
+        $sysPrompt = "Anda adalah 'Amania AI Course & Career Advisor', asisten virtual interaktif, ramah, dan sangat membantu di platform edukasi Amania Nusantara Professional.\n";
+        $sysPrompt .= "Tugas Anda adalah merekomendasikan produk edukasi terbaik berdasarkan minat, karir, atau kebutuhan pengguna.\n\n";
+        $sysPrompt .= "Berikut adalah DAFTAR SEMUA PRODUK (KURSUS, E-PRODUK, DAN WEBINAR) yang tersedia di platform Amania:\n";
+        $sysPrompt .= json_encode($allCatalog, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n\n";
+        
+        $sysPrompt .= "ATURAN UTAMA:\n";
+        $sysPrompt .= "1. Jika pengguna bertanya tentang rekomendasi produk (kursus, ebook, webinar), cocokkan dengan daftar di atas.\n";
+        $sysPrompt .= "2. JIKA ADA yang cocok, WAJIB sertakan tautan ke produk tersebut dengan format Markdown absolut path menggunakan field slug yang tersedia (contoh: [Judul](/courses/slug)). JANGAN PERNAH membuat tautan palsu.\n";
+        $sysPrompt .= "3. Jika tidak ada kursus yang benar-benar relevan dengan permintaan pengguna, katakan dengan jujur bahwa saat ini belum ada kursus spesifik tentang itu, dan rekomendasikan kursus terdekat yang mungkin berguna.\n";
+        $sysPrompt .= "4. Bersikaplah seperti Konsultan Karir. Tanyakan tujuan mereka jika mereka bingung.\n";
+        $sysPrompt .= "5. Gunakan bahasa Indonesia yang santai tapi profesional (gunakan kata ganti 'Anda').\n";
+        $sysPrompt .= "6. PENTING: Di baris PALING BAWAH jawaban Anda, WAJIB tuliskan 3 contoh saran balasan/pertanyaan yang bisa diklik pengguna, dipisahkan oleh tanda '|||'.\n";
+        $sysPrompt .= "Saran balasan INI HARUS DITULIS DARI SUDUT PANDANG PENGGUNA (seolah-olah pengguna yang mengatakannya kepada Anda).\n";
+        $sysPrompt .= "Contoh format yang benar di baris terakhir:\n";
+        $sysPrompt .= "|||Saya pemula, dari mana saya harus mulai?|Ada kursus tentang pengembangan web?|Berapa harganya?\n";
+        $sysPrompt .= "JANGAN menulis saran dari sudut pandang Anda (JANGAN menulis: 'Apakah Anda tertarik belajar X?'). Tuliskan: 'Saya tertarik belajar X, ada saran?'\n";
+
+        $contents = $request->input('messages');
+
+        $payload = [
+            'system_instruction' => [
+                'parts' => ['text' => $sysPrompt]
+            ],
+            'contents' => $contents
+        ];
+
+        $url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:streamGenerateContent?alt=sse&key=' . $geminiApiKey;
+
+        return response()->stream(function () use ($url, $payload) {
+            $ch = curl_init();
+            curl_setopt($ch, CURLOPT_URL, $url);
+            curl_setopt($ch, CURLOPT_POST, 1);
+            curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
+            curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
+            
+            curl_setopt($ch, CURLOPT_WRITEFUNCTION, function($ch, $data) {
+                $lines = explode("\n", $data);
+                foreach ($lines as $line) {
+                    if (strpos($line, 'data: ') === 0) {
+                        $jsonStr = substr($line, 6);
+                        $json = json_decode($jsonStr, true);
+                        if (isset($json['candidates'][0]['content']['parts'][0]['text'])) {
+                            $chunkText = $json['candidates'][0]['content']['parts'][0]['text'];
+                            echo "data: " . json_encode(['chunk' => $chunkText]) . "\n\n";
+                            ob_flush();
+                            flush();
+                        }
+                    }
+                }
+                return strlen($data);
+            });
+
+            curl_exec($ch);
+            curl_close($ch);
+
+            echo "data: [DONE]\n\n";
+            ob_flush();
+            flush();
+
+        }, 200, [
+            'Cache-Control' => 'no-cache',
+            'Content-Type' => 'text/event-stream',
+            'X-Accel-Buffering' => 'no'
         ]);
     }
 }

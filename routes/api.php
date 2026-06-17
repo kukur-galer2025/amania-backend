@@ -78,6 +78,9 @@ Route::get('/courses/{slug}', [CourseController::class, 'show']);
 Route::get('/courses/{slug}/reviews', [CourseController::class, 'getReviews']);
 Route::get('/course-categories', [AdminCourseCategory::class, 'index']);
 
+// 🔥 AI COURSE ADVISOR 🔥
+Route::post('/ai/course-advisor', [CourseController::class, 'askCourseAdvisor']);
+
 // Download file lesson & certificate — diluar auth:sanctum karena browser <a target="_blank"> tidak kirim Authorization header
 // Auth ditangani di controller via ?token= query parameter
 Route::get('/courses/lessons/{lessonId}/download', [CourseController::class, 'downloadLessonFile']);
@@ -142,6 +145,11 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/courses/lessons/{lessonId}/comments', [LessonCommentController::class, 'index']);
     Route::post('/courses/lessons/{lessonId}/comments', [LessonCommentController::class, 'store']);
     Route::delete('/courses/lessons/comments/{id}', [LessonCommentController::class, 'destroy']);
+
+    // 🔥 AI MENTOR 🔥
+    Route::get('/courses/lessons/{lessonId}/mentor-chats', [CourseController::class, 'getMentorChats']);
+    Route::delete('/courses/lessons/{lessonId}/mentor-chats', [CourseController::class, 'clearMentorChats']);
+    Route::post('/courses/lessons/{lessonId}/mentor', [CourseController::class, 'askMentor']);
 
     Route::get('/my-events/{slug}', [MyEventController::class, 'show']);
     Route::get('/my-events/{slug}/download-poster', [MyEventController::class, 'downloadPoster']);
