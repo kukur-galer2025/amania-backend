@@ -158,7 +158,8 @@ class RegistrationController extends Controller
      */
     public function export(Request $request, $eventId)
     {
-        $query = Registration::with(['user', 'event']);
+        $query = Registration::with(['user', 'event'])
+                             ->where('tier', 'premium');
         
         if ($eventId !== 'all') {
             $query->where('event_id', $eventId);
@@ -176,7 +177,7 @@ class RegistrationController extends Controller
             "Expires"             => "0"
         );
 
-        $columns = ['ID', 'Nama Lengkap', 'Email', 'No WA/HP', 'Nama Program', 'Kode Tiket', 'Tipe Tiket', 'Status', 'Nominal Bayar', 'Tanggal Daftar'];
+        $columns = ['Nama Lengkap', 'Peran/Jabatan', 'Nomor Sertifikat'];
 
         $callback = function() use($registrations, $columns) {
             $file = fopen('php://output', 'w');
@@ -184,16 +185,9 @@ class RegistrationController extends Controller
 
             foreach ($registrations as $reg) {
                 fputcsv($file, [
-                    $reg->id,
-                    $reg->user->name ?? 'Unknown',
-                    $reg->user->email ?? 'Unknown',
-                    $reg->user->phone ?? '-',
-                    $reg->event->title ?? 'Unknown',
-                    $reg->ticket_code ?? '-',
-                    strtoupper($reg->tier ?? 'BASIC'),
-                    strtoupper($reg->status),
-                    $reg->total_amount,
-                    $reg->created_at->format('Y-m-d H:i:s')
+                    $reg->user->name ?? $reg->name,
+                    '-', // peran/jabatan belum ada di database
+                    '-', // nomor sertifikat belum ada di database
                 ]);
             }
 
