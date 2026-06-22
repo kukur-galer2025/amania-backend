@@ -243,6 +243,7 @@ Route::middleware(['auth:sanctum', 'role:superadmin'])->prefix('admin')->group(f
     Route::delete('/speakers/{id}', [AdminSpeaker::class, 'destroy']);
 
     Route::get('/registrations', [AdminReg::class, 'index']);
+    Route::get('/registrations/export/{eventId}', [AdminReg::class, 'export']);
     Route::post('/registrations/{id}/verify', [AdminReg::class, 'verify']);
     Route::post('/registrations/{id}/reject', [AdminReg::class, 'reject']); 
     Route::post('/registrations/{id}/pending', [AdminReg::class, 'markAsPending']); 

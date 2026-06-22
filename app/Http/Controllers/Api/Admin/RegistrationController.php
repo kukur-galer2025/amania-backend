@@ -152,4 +152,54 @@ class RegistrationController extends Controller
             'data' => $reg
         ]);
     }
+
+    /**
+     * EXPORT DATA PENDAFTAR KE CSV
+     */
+    public function export(Request $request, $eventId)
+    {
+        $query = Registration::with(['user', 'event']);
+        
+        if ($eventId !== 'all') {
+            $query->where('event_id', $eventId);
+        }
+
+        $registrations = $query->get();
+
+        $filename = "Registrants_{$eventId}_" . date('Ymd_His') . ".csv";
+
+        $headers = array(
+            "Content-type"        => "text/csv",
+            "Content-Disposition" => "attachment; filename=$filename",
+            "Pragma"              => "no-cache",
+            "Cache-Control"       => "must-revalidate, post-check=0, pre-check=0",
+            "Expires"             => "0"
+        );
+
+        $columns = ['ID', 'Nama Lengkap', 'Email', 'No WA/HP', 'Nama Program', 'Kode Tiket', 'Tipe Tiket', 'Status', 'Nominal Bayar', 'Tanggal Daftar'];
+
+        $callback = function() use($registrations, $columns) {
+            $file = fopen('php://output', 'w');
+            fputcsv($file, $columns);
+
+            foreach ($registrations as $reg) {
+                fputcsv($file, [
+                    $reg->id,
+                    $reg->user->name ?? 'Unknown',
+                    $reg->user->email ?? 'Unknown',
+                    $reg->user->phone ?? '-',
+                    $reg->event->title ?? 'Unknown',
+                    $reg->ticket_code ?? '-',
+                    strtoupper($reg->tier ?? 'BASIC'),
+                    strtoupper($reg->status),
+                    $reg->total_amount,
+                    $reg->created_at->format('Y-m-d H:i:s')
+                ]);
+            }
+
+            fclose($file);
+        };
+
+        return response()->stream($callback, 200, $headers);
+    }
 }
