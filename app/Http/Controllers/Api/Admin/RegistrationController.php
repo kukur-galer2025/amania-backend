@@ -194,7 +194,7 @@ class RegistrationController extends Controller
                 fputcsv($file, [
                     $reg->user->name ?? $reg->name,
                     'PESERTA', // peran/jabatan diisi peserta
-                    '-', // nomor sertifikat belum ada di database
+                    $reg->ticket_code ?: '-', // nomor sertifikat mengambil kode tiket
                 ], ',');
             }
 
