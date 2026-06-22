@@ -48,7 +48,7 @@ use App\Http\Controllers\Api\Admin\CourseLessonController as AdminCourseLesson;
 
 /*
 |--------------------------------------------------------------------------
-| API Routes - Amania Nusantara Professional
+| API Routes - Amania Institute Professional
 |--------------------------------------------------------------------------
 */
 
@@ -207,6 +207,22 @@ Route::middleware(['auth:sanctum', 'role:superadmin|creator'])->prefix('admin')-
     Route::get('/discussions', [\App\Http\Controllers\Api\AdminDiscussionController::class, 'index']);
     Route::post('/discussions/{id}/reply', [\App\Http\Controllers\Api\AdminDiscussionController::class, 'reply']);
     Route::delete('/discussions/{id}', [\App\Http\Controllers\Api\AdminDiscussionController::class, 'destroy']);
+
+    // Transactions (Creator & Superadmin)
+    Route::get('/e-product-transactions', [\App\Http\Controllers\Api\Admin\EProductTransactionController::class, 'index']);
+    Route::post('/e-product-transactions/{id}/mark-paid', [\App\Http\Controllers\Api\Admin\EProductTransactionController::class, 'markAsPaid']);
+    Route::get('/e-product-transactions/export', [\App\Http\Controllers\Api\Admin\EProductTransactionController::class, 'exportPdf']); 
+    
+    Route::get('/course-transactions', [\App\Http\Controllers\Api\Admin\CourseTransactionController::class, 'index']);
+    Route::put('/course-transactions/{id}/mark-paid', [\App\Http\Controllers\Api\Admin\CourseTransactionController::class, 'markAsPaid']);
+
+    // Articles (Creator & Superadmin)
+    Route::get('/article-categories', [AdminCategory::class, 'index']);
+    Route::get('/articles', [AdminArticle::class, 'index']);
+    Route::get('/articles/{id}', [AdminArticle::class, 'show']); 
+    Route::post('/articles', [AdminArticle::class, 'store']);
+    Route::post('/articles/{id}', [AdminArticle::class, 'update']); 
+    Route::delete('/articles/{id}', [AdminArticle::class, 'destroy']);
 });
 
 // =========================================================================
@@ -239,13 +255,6 @@ Route::middleware(['auth:sanctum', 'role:superadmin'])->prefix('admin')->group(f
     Route::get('/reports', [AdminReport::class, 'index']);
     Route::get('/reports/export', [AdminReport::class, 'export']);
 
-    Route::get('/article-categories', [AdminCategory::class, 'index']);
-    Route::get('/articles', [AdminArticle::class, 'index']);
-    Route::get('/articles/{id}', [AdminArticle::class, 'show']); 
-    Route::post('/articles', [AdminArticle::class, 'store']);
-    Route::post('/articles/{id}', [AdminArticle::class, 'update']); 
-    Route::delete('/articles/{id}', [AdminArticle::class, 'destroy']);
-
     // Kelola User
     Route::get('/users', [AdminUser::class, 'index']);
     Route::post('/users', [AdminUser::class, 'store']); 
@@ -261,18 +270,8 @@ Route::middleware(['auth:sanctum', 'role:superadmin'])->prefix('admin')->group(f
     Route::put('/e-product-categories/{id}', [AdminEProductCategory::class, 'update']);
     Route::delete('/e-product-categories/{id}', [AdminEProductCategory::class, 'destroy']);
 
-
-
-    Route::get('/e-product-transactions', [AdminEProductTransaction::class, 'index']);
-    Route::post('/e-product-transactions/{id}/mark-paid', [AdminEProductTransaction::class, 'markAsPaid']);
-    Route::get('/e-product-transactions/export', [AdminEProductTransaction::class, 'exportPdf']); 
-
     // 🔥 KURSUS ONLINE (ADMIN) 🔥
     Route::post('/course-categories', [AdminCourseCategory::class, 'store']);
     Route::put('/course-categories/{id}', [AdminCourseCategory::class, 'update']);
     Route::delete('/course-categories/{id}', [AdminCourseCategory::class, 'destroy']);
-
-
-
-    Route::get('/course-transactions', [AdminCourseTransaction::class, 'index']);
 });

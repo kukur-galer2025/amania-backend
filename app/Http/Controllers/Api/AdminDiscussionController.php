@@ -4,7 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
-use App\Models\CourseLessonComment;
+use App\Models\LessonComment;
 
 class AdminDiscussionController extends Controller
 {
@@ -13,7 +13,7 @@ class AdminDiscussionController extends Controller
         $user = $request->user();
         
         // Ambil diskusi parent_id = null
-        $query = CourseLessonComment::with([
+        $query = LessonComment::with([
             'user',
             'lesson.section.course',
             'replies.user'
@@ -50,7 +50,7 @@ class AdminDiscussionController extends Controller
             'body' => 'required|string|max:2000'
         ]);
 
-        $parent = CourseLessonComment::findOrFail($id);
+        $parent = LessonComment::findOrFail($id);
         $user = $request->user();
 
         // Verify access
@@ -58,7 +58,7 @@ class AdminDiscussionController extends Controller
             return response()->json(['success' => false, 'message' => 'Akses ditolak.'], 403);
         }
 
-        $reply = CourseLessonComment::create([
+        $reply = LessonComment::create([
             'course_lesson_id' => $parent->course_lesson_id,
             'user_id' => $user->id,
             'parent_id' => $parent->id,
@@ -74,7 +74,7 @@ class AdminDiscussionController extends Controller
 
     public function destroy(Request $request, $id)
     {
-        $comment = CourseLessonComment::findOrFail($id);
+        $comment = LessonComment::findOrFail($id);
         $user = $request->user();
 
         // Verify access

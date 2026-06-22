@@ -727,7 +727,7 @@ class CourseController extends Controller
 
         $allCatalog = array_merge($courses->toArray(), $eproducts->toArray(), $events->toArray());
 
-        $sysPrompt = "Anda adalah 'Amania AI Course & Career Advisor', asisten virtual interaktif, ramah, dan sangat membantu di platform edukasi Amania Nusantara Professional.\n";
+        $sysPrompt = "Anda adalah 'Amania AI Course & Career Advisor', asisten virtual interaktif, ramah, dan sangat membantu di platform edukasi Amania Institute Professional.\n";
         $sysPrompt .= "Tugas Anda adalah merekomendasikan produk edukasi terbaik berdasarkan minat, karir, atau kebutuhan pengguna.\n\n";
         $sysPrompt .= "Berikut adalah DAFTAR SEMUA PRODUK (KURSUS, E-PRODUK, DAN WEBINAR) yang tersedia di platform Amania:\n";
         $sysPrompt .= json_encode($allCatalog, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n\n";

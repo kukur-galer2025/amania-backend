@@ -13,10 +13,20 @@ class EProductTransactionController extends Controller
     public function index(Request $request)
     {
         try {
-            $transactions = EProductPurchase::with([
+            $user = auth()->user();
+            
+            $query = EProductPurchase::with([
                 'buyer:id,name,email,phone', 
-                'items.product:id,title,price' 
-            ])->latest()->get();
+                'items.product:id,title,price,user_id' 
+            ]);
+
+            if ($user && $user->role === 'creator') {
+                $query->whereHas('items.product', function ($q) use ($user) {
+                    $q->where('user_id', $user->id);
+                });
+            }
+
+            $transactions = $query->latest()->get();
 
             $stats = [
                 'total_revenue' => (int) $transactions->whereIn('status', ['PAID', 'SETTLED'])->sum('amount'),
@@ -32,6 +42,7 @@ class EProductTransactionController extends Controller
                     'tripay_reference' => $tx->tripay_reference, 
                     'checkout_url'     => $tx->checkout_url,     
                     'payment_method'   => $tx->payment_method,   
+                    'payment_proof'    => $tx->payment_proof ? url('storage/' . $tx->payment_proof) : null,
                     'amount'           => $tx->amount,
                     'status'           => $tx->status,
                     'created_at'       => $tx->created_at,
@@ -146,7 +157,7 @@ class EProductTransactionController extends Controller
             <body>
                 <div class="header">
                     <p class="title">LAPORAN PENJUALAN E-PRODUK</p>
-                    <p style="margin:5px 0;">Amania Nusantara Professional Platform</p>
+                    <p style="margin:5px 0;">Amania Institute Professional Platform</p>
                 </div>
 
                 <div class="summary-box">

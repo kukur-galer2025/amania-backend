@@ -20,8 +20,9 @@ class ArticleController extends Controller
         $query = Article::with(['category', 'author']);
 
         // 🔥 LOGIKA MULTI-TENANT 🔥
-
-
+        if ($currentUser->role === 'creator') {
+            $query->where('user_id', $currentUser->id);
+        }
         $articles = $query->latest()->get();
 
         return response()->json([
@@ -37,9 +38,9 @@ class ArticleController extends Controller
     {
         $currentUser = $request->user();
         $article = Article::with('category')->findOrFail($id);
-
-
-
+        if ($currentUser->role === 'creator' && $article->user_id !== $currentUser->id) {
+            return response()->json(['success' => false, 'message' => 'Akses ditolak.'], 403);
+        }
         return response()->json([
             'success' => true,
             'data' => $article
@@ -105,9 +106,9 @@ class ArticleController extends Controller
     {
         $currentUser = $request->user();
         $article = Article::findOrFail($id);
-
-
-
+        if ($currentUser->role === 'creator' && $article->user_id !== $currentUser->id) {
+            return response()->json(['success' => false, 'message' => 'Akses ditolak.'], 403);
+        }
         $request->validate([
             'title' => 'required|string|max:255',
             'article_category_id' => 'required|exists:article_categories,id',
@@ -162,9 +163,9 @@ class ArticleController extends Controller
     {
         $currentUser = $request->user();
         $article = Article::findOrFail($id);
-
-
-
+        if ($currentUser->role === 'creator' && $article->user_id !== $currentUser->id) {
+            return response()->json(['success' => false, 'message' => 'Akses ditolak.'], 403);
+        }
         if ($article->image && Storage::disk('public')->exists($article->image)) {
             Storage::disk('public')->delete($article->image);
         }

@@ -18,51 +18,15 @@ use Illuminate\Support\Facades\Log;
 class EProductCheckoutController extends Controller
 {
     // =========================================================================
-    // 1. MENGAMBIL DAFTAR METODE PEMBAYARAN DARI TRIPAY
+    // 1. MENGAMBIL DAFTAR METODE PEMBAYARAN DARI TRIPAY (TIDAK DIPAKAI LAGI)
     // =========================================================================
     public function getPaymentChannels()
     {
-        try {
-            $apiKey = env('TRIPAY_API_KEY');
-            
-            if (empty($apiKey)) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'TRIPAY_API_KEY belum dikonfigurasi di file .env backend Anda.'
-                ], 400);
-            }
-
-            $apiUrl = rtrim(env('TRIPAY_URL', 'https://tripay.co.id/api/'), '/') . '/merchant/payment-channel';
-
-            $response = Http::withoutVerifying()
-                ->withHeaders([
-                    'Authorization' => 'Bearer ' . $apiKey
-                ])
-                ->get($apiUrl);
-                
-            $result = $response->json();
-
-            if ($response->successful() && isset($result['success']) && $result['success'] == true) {
-                return response()->json([
-                    'success' => true,
-                    'message' => 'Berhasil mengambil metode pembayaran dari Tripay.',
-                    'data'    => $result['data']
-                ], 200);
-            }
-
-            return response()->json([
-                'success' => false,
-                'message' => 'Tripay Error: ' . ($result['message'] ?? 'Kredensial API Key tidak valid.'),
-                'debug'   => $result
-            ], 400);
-
-        } catch (\Exception $e) {
-            Log::error('Tripay Channels Error: ' . $e->getMessage());
-            return response()->json([
-                'success' => false,
-                'message' => 'Sistem Error: ' . $e->getMessage(),
-            ], 500);
-        }
+        return response()->json([
+            'success' => true,
+            'message' => 'Menggunakan pembayaran manual QRIS',
+            'data'    => []
+        ], 200);
     }
 
     // =========================================================================
@@ -180,82 +144,42 @@ class EProductCheckoutController extends Controller
             }
 
             // ==========================================
-            // LOGIKA SIGNATURE & REQUEST TRIPAY
+            // LOGIKA PEMBAYARAN MANUAL QRIS (UPLOAD)
             // ==========================================
-            $privateKey   = env('TRIPAY_PRIVATE_KEY');
-            $merchantCode = env('TRIPAY_MERCHANT_CODE');
-            $apiKey       = env('TRIPAY_API_KEY');
-
-            if (empty($privateKey) || empty($merchantCode) || empty($apiKey)) {
+            if (!$request->hasFile('payment_proof')) {
                 DB::rollBack();
-                return response()->json(['success' => false, 'message' => 'Gagal: Kredensial Tripay belum lengkap di file .env.'], 400);
+                return response()->json(['success' => false, 'message' => 'Bukti pembayaran wajib diunggah.'], 400);
             }
 
-            $apiUrl = rtrim(env('TRIPAY_URL', 'https://tripay.co.id/api/'), '/') . '/transaction/create';
-            $signature = hash_hmac('sha256', $merchantCode . $merchantRef . $totalAmount, $privateKey);
+            $paymentPath = $request->file('payment_proof')->store('payments', 'public');
 
-            $payload = [
-                'method'         => $request->input('method'),
-                'merchant_ref'   => $merchantRef,
-                'amount'         => $totalAmount,
-                'customer_name'  => $user->name ?? 'Member Amania',
-                'customer_email' => $user->email ?? 'email@amania.id',
-                'customer_phone' => $user->phone ?? '08000000000',
-                'order_items'    => $orderItemsPayload,
-                'return_url'     => rtrim(env('FRONTEND_URL', 'https://amania.id'), '/') . '/my-e-products',
-                'expired_time'   => (time() + (24 * 60 * 60)), // Expired default 24 Jam
-                'signature'      => $signature
-            ];
+            $purchase = EProductPurchase::create([
+                'reference'        => $merchantRef, 
+                'user_id'          => $user->id,
+                'amount'           => $totalAmount,
+                'payment_method'   => 'MANUAL_QRIS', 
+                'payment_proof'    => $paymentPath,
+                'status'           => 'PENDING',
+            ]);
 
-            // KIRIM REQUEST KE TRIPAY
-            $response = Http::withoutVerifying()
-                ->withHeaders(['Authorization' => 'Bearer ' . $apiKey])
-                ->post($apiUrl, $payload);
-                
-            $result = $response->json();
-
-            // JIKA TRIPAY SUKSES, SIMPAN KE DATABASE
-            if ($response->successful() && isset($result['success']) && $result['success'] == true) {
-                
-                $purchase = EProductPurchase::create([
-                    'reference'        => $merchantRef, 
-                    'tripay_reference' => $result['data']['reference'],
-                    'user_id'          => $user->id,
-                    // 'e_product_id' => ... 🔥 BARIS INI SUDAH DIHAPUS PERMANEN
-                    'amount'           => $totalAmount,
-                    'checkout_url'     => $result['data']['checkout_url'],
-                    'expired_time'     => $result['data']['expired_time'] ?? null,
-                    'payment_method'   => $request->input('method'), 
-                    'status'           => 'UNPAID',
-                ]);
-
-                foreach ($itemsToSave as $item) {
-                    EProductOrderItem::create([
-                        'e_product_purchase_id' => $purchase->id,
-                        'e_product_id'          => $item['id'],
-                        'price'                 => $item['price']
-                    ]);
-                }
-
-                if (!$isDirectBuy) {
-                    Cart::where('user_id', $user->id)->delete();
-                }
-                
-                DB::commit();
-
-                return response()->json([
-                    'success'      => true,
-                    'message'      => 'Pesanan berhasil dibuat! Silakan lakukan pembayaran.',
-                    'checkout_url' => $result['data']['checkout_url'],
+            foreach ($itemsToSave as $item) {
+                EProductOrderItem::create([
+                    'e_product_purchase_id' => $purchase->id,
+                    'e_product_id'          => $item['id'],
+                    'price'                 => $item['price']
                 ]);
             }
 
-            DB::rollBack();
-            Log::error('Tripay Create Transaction Error: ', $result ?? []);
+            if (!$isDirectBuy) {
+                Cart::where('user_id', $user->id)->delete();
+            }
+            
+            DB::commit();
+
             return response()->json([
-                'success' => false, 
-                'message' => 'Tripay Error: ' . ($result['message'] ?? 'Gagal membuat transaksi ke payment gateway.')
-            ], 400);
+                'success'      => true,
+                'message'      => 'Pesanan berhasil dibuat! Menunggu verifikasi admin.',
+            ]);
 
         } catch (\Exception $e) {
             DB::rollBack();
@@ -273,8 +197,8 @@ class EProductCheckoutController extends Controller
     public function purchaseCourse(Request $request)
     {
         $request->validate([
-            'method'    => 'required|string',
-            'course_id' => 'required|exists:courses,id',
+            'course_id'     => 'required|exists:courses,id',
+            'payment_proof' => 'nullable|image|mimes:jpg,jpeg,png|max:5120',
         ]);
 
         $user   = $request->user();
@@ -314,70 +238,31 @@ class EProductCheckoutController extends Controller
                 ]);
             }
 
-            // TRIPAY CHECKOUT
-            $privateKey   = env('TRIPAY_PRIVATE_KEY');
-            $merchantCode = env('TRIPAY_MERCHANT_CODE');
-            $apiKey       = env('TRIPAY_API_KEY');
-
-            if (empty($privateKey) || empty($merchantCode) || empty($apiKey)) {
+            // ==========================================
+            // LOGIKA PEMBAYARAN MANUAL QRIS (UPLOAD)
+            // ==========================================
+            if (!$request->hasFile('payment_proof')) {
                 DB::rollBack();
-                return response()->json(['success' => false, 'message' => 'Kredensial Tripay belum lengkap.'], 400);
+                return response()->json(['success' => false, 'message' => 'Bukti pembayaran wajib diunggah.'], 400);
             }
 
-            $apiUrl    = rtrim(env('TRIPAY_URL', 'https://tripay.co.id/api/'), '/') . '/transaction/create';
-            $signature = hash_hmac('sha256', $merchantCode . $merchantRef . $totalAmount, $privateKey);
+            $paymentPath = $request->file('payment_proof')->store('payments', 'public');
 
-            $payload = [
-                'method'         => $request->input('method'),
-                'merchant_ref'   => $merchantRef,
-                'amount'         => $totalAmount,
-                'customer_name'  => $user->name ?? 'Member Amania',
-                'customer_email' => $user->email ?? 'email@amania.id',
-                'customer_phone' => $user->phone ?? '08000000000',
-                'order_items'    => [[
-                    'sku'      => 'CRS-' . $course->id,
-                    'name'     => substr($course->title, 0, 50),
-                    'price'    => $totalAmount,
-                    'quantity' => 1,
-                ]],
-                'return_url'   => rtrim(env('FRONTEND_URL', 'https://amania.id'), '/') . '/my-courses',
-                'expired_time' => (time() + (24 * 60 * 60)),
-                'signature'    => $signature,
-            ];
+            CourseEnrollment::create([
+                'reference'        => $merchantRef,
+                'user_id'          => $user->id,
+                'course_id'        => $course->id,
+                'amount'           => $totalAmount,
+                'payment_method'   => 'MANUAL_QRIS',
+                'payment_proof'    => $paymentPath,
+                'status'           => 'PENDING',
+            ]);
 
-            $response = Http::withoutVerifying()
-                ->withHeaders(['Authorization' => 'Bearer ' . $apiKey])
-                ->post($apiUrl, $payload);
-
-            $result = $response->json();
-
-            if ($response->successful() && isset($result['success']) && $result['success'] == true) {
-                CourseEnrollment::create([
-                    'reference'        => $merchantRef,
-                    'tripay_reference' => $result['data']['reference'],
-                    'user_id'          => $user->id,
-                    'course_id'        => $course->id,
-                    'amount'           => $totalAmount,
-                    'checkout_url'     => $result['data']['checkout_url'],
-                    'expired_time'     => $result['data']['expired_time'] ?? null,
-                    'payment_method'   => $request->input('method'),
-                    'status'           => 'UNPAID',
-                ]);
-
-                DB::commit();
-                return response()->json([
-                    'success'      => true,
-                    'message'      => 'Pesanan kursus berhasil dibuat!',
-                    'checkout_url' => $result['data']['checkout_url'],
-                ]);
-            }
-
-            DB::rollBack();
-            Log::error('Tripay Course Transaction Error: ', $result ?? []);
+            DB::commit();
             return response()->json([
-                'success' => false,
-                'message' => 'Tripay Error: ' . ($result['message'] ?? 'Gagal membuat transaksi.')
-            ], 400);
+                'success'      => true,
+                'message'      => 'Pesanan kursus berhasil dibuat! Menunggu verifikasi admin.',
+            ]);
 
         } catch (\Exception $e) {
             DB::rollBack();
@@ -391,76 +276,6 @@ class EProductCheckoutController extends Controller
     // =========================================================================
     public function tripayWebhook(Request $request)
     {
-        $callbackSignature = $request->header('X-Callback-Signature') ?? $request->server('HTTP_X_CALLBACK_SIGNATURE');
-        $json = $request->getContent();
-        
-        $signature = hash_hmac('sha256', $json, env('TRIPAY_PRIVATE_KEY'));
-
-        if ($signature !== $callbackSignature) {
-            Log::warning('Tripay Webhook: Invalid Signature');
-            return response()->json(['success' => false, 'message' => 'Invalid signature'], 403);
-        }
-
-        $event = $request->header('X-Callback-Event') ?? $request->server('HTTP_X_CALLBACK_EVENT');
-        if ('payment_status' !== $event) {
-            return response()->json(['success' => false, 'message' => 'Unrecognized callback event'], 400);
-        }
-
-        $data = json_decode($json);
-        $merchantRef = $data->merchant_ref;
-        $status = $data->status;
-
-        try {
-            // ============================================
-            // HANDLE E-PRODUCT TRANSACTIONS (INV-EP-)
-            // ============================================
-            if (Str::startsWith($merchantRef, 'INV-EP-')) {
-                $purchase = EProductPurchase::where('reference', $merchantRef)->first();
-                
-                if (!$purchase) {
-                    return response()->json(['success' => false, 'message' => 'Purchase not found'], 404);
-                }
-
-                if (in_array($status, ['PAID', 'SETTLED'])) {
-                    $updateData = ['status' => 'PAID'];
-                    if (isset($data->payment_method)) {
-                        $updateData['payment_method'] = $data->payment_method;
-                    }
-                    $purchase->update($updateData);
-                } elseif (in_array($status, ['EXPIRED', 'FAILED', 'REFUND'])) {
-                    $purchase->update(['status' => 'EXPIRED']);
-                }
-
-            // ============================================
-            // HANDLE COURSE TRANSACTIONS (INV-CRS-)
-            // ============================================
-            } elseif (Str::startsWith($merchantRef, 'INV-CRS-')) {
-                $enrollment = CourseEnrollment::where('reference', $merchantRef)->first();
-
-                if (!$enrollment) {
-                    return response()->json(['success' => false, 'message' => 'Enrollment not found'], 404);
-                }
-
-                if (in_array($status, ['PAID', 'SETTLED'])) {
-                    $updateData = ['status' => 'PAID'];
-                    if (isset($data->payment_method)) {
-                        $updateData['payment_method'] = $data->payment_method;
-                    }
-                    $enrollment->update($updateData);
-                } elseif (in_array($status, ['EXPIRED', 'FAILED', 'REFUND'])) {
-                    $enrollment->update(['status' => 'EXPIRED']);
-                }
-
-            } else {
-                Log::warning('Tripay Webhook: Unknown Merchant Ref format => ' . $merchantRef);
-                return response()->json(['success' => false, 'message' => 'Format Merchant Ref tidak dikenali'], 400);
-            }
-
-            return response()->json(['success' => true, 'message' => 'Status transaksi berhasil diupdate.']);
-
-        } catch (\Exception $e) {
-            Log::error('Tripay Webhook Error: ' . $e->getMessage());
-            return response()->json(['success' => false, 'message' => 'Internal server error'], 500);
-        }
+        return response()->json(['success' => false, 'message' => 'Tripay Webhook is deprecated.']);
     }
 }
