@@ -181,14 +181,21 @@ class RegistrationController extends Controller
 
         $callback = function() use($registrations, $columns) {
             $file = fopen('php://output', 'w');
-            fputcsv($file, $columns);
+            
+            // BOM UTF-8 agar Excel membaca karakter dengan benar
+            fprintf($file, chr(0xEF).chr(0xBB).chr(0xBF));
+
+            // sep= hint agar Excel (termasuk locale Indonesia) tahu delimiter-nya koma
+            fwrite($file, "sep=,\r\n");
+
+            fputcsv($file, $columns, ',');
 
             foreach ($registrations as $reg) {
                 fputcsv($file, [
                     $reg->user->name ?? $reg->name,
-                    '-', // peran/jabatan belum ada di database
+                    'PESERTA', // peran/jabatan diisi peserta
                     '-', // nomor sertifikat belum ada di database
-                ]);
+                ], ',');
             }
 
             fclose($file);
