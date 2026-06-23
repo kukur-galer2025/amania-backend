@@ -15,8 +15,10 @@ class CourseEnrollment extends Model
         'amount',
         'checkout_url',
         'payment_method',
+        'payment_proof',
         'expired_time',
         'status',
+        'rejection_reason',
     ];
 
     public function user(): BelongsTo

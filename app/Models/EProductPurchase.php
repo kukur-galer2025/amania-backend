@@ -19,8 +19,10 @@ class EProductPurchase extends Model
         'amount',
         'checkout_url',
         'payment_method', 
+        'payment_proof',
         'expired_time', 
-        'status'
+        'status',
+        'rejection_reason'
     ];
 
     public function buyer(): BelongsTo

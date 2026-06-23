@@ -7,6 +7,7 @@ use App\Models\EProductPurchase;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Barryvdh\DomPDF\Facade\Pdf;
+use App\Notifications\EProductStatusNotification;
 
 class EProductTransactionController extends Controller
 {
@@ -75,7 +76,17 @@ class EProductTransactionController extends Controller
     public function markAsPaid($id)
     {
         try {
-            $transaction = EProductPurchase::with('items')->findOrFail($id);
+            $user = auth()->user();
+            $transaction = EProductPurchase::with('items.product')->findOrFail($id);
+
+            if ($user->role === 'creator') {
+                $hasUnauthorizedProduct = $transaction->items->contains(function ($item) use ($user) {
+                    return $item->product && $item->product->user_id !== $user->id;
+                });
+                if ($hasUnauthorizedProduct) {
+                    return response()->json(['success' => false, 'message' => 'Akses ditolak. Ada produk milik kreator lain dalam transaksi ini.'], 403);
+                }
+            }
             
             if (in_array($transaction->status, ['PAID', 'SETTLED'])) {
                 return response()->json(['success' => false, 'message' => 'Transaksi ini sudah lunas sebelumnya.']);
@@ -101,6 +112,9 @@ class EProductTransactionController extends Controller
                 }
             }
 
+            // Kirim notifikasi (email & database)
+            $transaction->buyer->notify(new EProductStatusNotification($transaction, 'verified'));
+
             return response()->json([
                 'success' => true,
                 'message' => 'Transaksi berhasil ditandai LUNAS secara manual.'
@@ -108,6 +122,47 @@ class EProductTransactionController extends Controller
 
         } catch (\Exception $e) {
             return response()->json(['success' => false, 'message' => 'Terjadi kesalahan sistem.'], 500);
+        }
+    }
+
+    public function reject(Request $request, $id)
+    {
+        try {
+            $request->validate([
+                'reason' => 'required|string|max:500'
+            ]);
+
+            $user = auth()->user();
+            $transaction = EProductPurchase::with('items.product')->findOrFail($id);
+            
+            if ($user->role === 'creator') {
+                $hasUnauthorizedProduct = $transaction->items->contains(function ($item) use ($user) {
+                    return $item->product && $item->product->user_id !== $user->id;
+                });
+                if ($hasUnauthorizedProduct) {
+                    return response()->json(['success' => false, 'message' => 'Akses ditolak.'], 403);
+                }
+            }
+
+            if (in_array($transaction->status, ['PAID', 'SETTLED'])) {
+                return response()->json(['success' => false, 'message' => 'Transaksi ini sudah lunas sebelumnya.']);
+            }
+
+            $transaction->update([
+                'status' => 'FAILED',
+                'rejection_reason' => $request->reason
+            ]);
+
+            // Kirim notifikasi (email & database)
+            $transaction->buyer->notify(new EProductStatusNotification($transaction, 'rejected'));
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Transaksi berhasil ditolak.'
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json(['success' => false, 'message' => 'Terjadi kesalahan sistem: ' . $e->getMessage()], 500);
         }
     }
 

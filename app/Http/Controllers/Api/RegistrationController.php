@@ -37,7 +37,7 @@ class RegistrationController extends Controller
         $request->validate([
             'event_id'      => 'required|exists:events,id',
             'tier'          => 'required|in:free,premium',
-            'payment_proof' => 'nullable|image|mimes:jpg,jpeg,png|max:5120'
+            'payment_proof' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:5120'
         ]);
 
         $event = Event::findOrFail($request->event_id);
@@ -124,7 +124,7 @@ class RegistrationController extends Controller
         }
 
         $request->validate([
-            'payment_proof' => 'required|image|mimes:jpg,jpeg,png|max:5120'
+            'payment_proof' => 'required|image|mimes:jpg,jpeg,png,webp|max:5120'
         ]);
         
         $registration = Registration::where('id', $id)->where('user_id', $user->id)->firstOrFail();

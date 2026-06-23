@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\EventController;
 use App\Http\Controllers\Api\ArticleController;
 use App\Http\Controllers\Api\RegistrationController;
+use App\Http\Controllers\Api\AdvertisementController;
 use App\Http\Controllers\Api\ProfileController;
 use App\Http\Controllers\Api\LeaderboardController;
 use App\Http\Controllers\Api\NotificationController; 
@@ -24,6 +25,7 @@ use App\Http\Controllers\Api\CartController; // 🔥 IMPORT CART CONTROLLER 🔥
 // --- 3. Import Admin Controllers ---
 use App\Http\Controllers\Api\Admin\EventController as AdminEvent;
 use App\Http\Controllers\Api\Admin\RegistrationController as AdminReg;
+use App\Http\Controllers\Api\Admin\AdvertisementController as AdminAd;
 use App\Http\Controllers\Api\Admin\ArticleCategoryController as AdminCategory;
 use App\Http\Controllers\Api\Admin\ArticleController as AdminArticle;
 use App\Http\Controllers\Api\Admin\MaterialController as AdminMaterial;
@@ -55,6 +57,10 @@ use App\Http\Controllers\Api\Admin\CourseLessonController as AdminCourseLesson;
 // =========================================================================
 // SECTION 1: PUBLIC ROUTES (Dapat diakses tanpa Login)
 // =========================================================================
+Route::get('/login', function () {
+    return response()->json(['success' => false, 'message' => 'Unauthenticated. Silakan login terlebih dahulu.'], 401);
+})->name('login');
+
 Route::post('/login', [AuthController::class, 'login']);
 Route::post('/register', [AuthController::class, 'register']);
 Route::post('/auth/google', [AuthController::class, 'googleLogin']);
@@ -66,6 +72,7 @@ Route::get('/events/{slug}', [EventController::class, 'show']);
 Route::get('/articles', [ArticleController::class, 'index']);
 Route::get('/articles/{slug}', [ArticleController::class, 'show']);
 Route::get('/leaderboard', [LeaderboardController::class, 'index']);
+Route::get('/advertisements', [AdvertisementController::class, 'index']);
 Route::get('/global-search', [GlobalSearchController::class, 'search']);
 
 Route::get('/e-products', [EProductController::class, 'index']);
@@ -120,11 +127,13 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/e-products/{id}/reviews', [EProductController::class, 'submitReview']);
     
     Route::get('/my-eproduct-transactions', [EProductController::class, 'myTransactions']);
+    Route::post('/e-product-transactions/{id}/reupload', [EProductCheckoutController::class, 'reuploadPaymentProofEProduct']);
 
     // 🔥 KURSUS ONLINE (MEMBER) 🔥
     Route::post('/checkout/course', [EProductCheckoutController::class, 'purchaseCourse']);
     Route::get('/my-courses', [CourseController::class, 'myCourses']);
     Route::get('/my-course-transactions', [CourseController::class, 'myTransactions']);
+    Route::post('/course-transactions/{id}/reupload', [EProductCheckoutController::class, 'reuploadPaymentProofCourse']);
     Route::get('/courses/{slug}/learn', [CourseController::class, 'learnCourse']);
     Route::post('/courses/progress', [CourseController::class, 'markProgress']);
     // Aliases agar frontend LearnClient.tsx kompatibel
@@ -211,10 +220,12 @@ Route::middleware(['auth:sanctum', 'role:superadmin|creator'])->prefix('admin')-
     // Transactions (Creator & Superadmin)
     Route::get('/e-product-transactions', [\App\Http\Controllers\Api\Admin\EProductTransactionController::class, 'index']);
     Route::post('/e-product-transactions/{id}/mark-paid', [\App\Http\Controllers\Api\Admin\EProductTransactionController::class, 'markAsPaid']);
+    Route::post('/e-product-transactions/{id}/reject', [\App\Http\Controllers\Api\Admin\EProductTransactionController::class, 'reject']);
     Route::get('/e-product-transactions/export', [\App\Http\Controllers\Api\Admin\EProductTransactionController::class, 'exportPdf']); 
     
     Route::get('/course-transactions', [\App\Http\Controllers\Api\Admin\CourseTransactionController::class, 'index']);
-    Route::put('/course-transactions/{id}/mark-paid', [\App\Http\Controllers\Api\Admin\CourseTransactionController::class, 'markAsPaid']);
+    Route::post('/course-transactions/{id}/mark-paid', [\App\Http\Controllers\Api\Admin\CourseTransactionController::class, 'markAsPaid']);
+    Route::post('/course-transactions/{id}/reject', [\App\Http\Controllers\Api\Admin\CourseTransactionController::class, 'reject']);
 
     // Articles (Creator & Superadmin)
     Route::get('/article-categories', [AdminCategory::class, 'index']);
@@ -249,6 +260,13 @@ Route::middleware(['auth:sanctum', 'role:superadmin'])->prefix('admin')->group(f
     Route::post('/registrations/{id}/pending', [AdminReg::class, 'markAsPending']); 
     
     Route::put('/registrations/{id}/tier', [AdminReg::class, 'changeTier']);
+
+    // ADVERTISEMENTS
+    Route::get('/advertisements', [AdminAd::class, 'index']);
+    Route::post('/advertisements', [AdminAd::class, 'store']);
+    Route::post('/advertisements/{id}', [AdminAd::class, 'update']);
+    Route::patch('/advertisements/{id}/toggle', [AdminAd::class, 'toggleActive']);
+    Route::delete('/advertisements/{id}', [AdminAd::class, 'destroy']);
 
     Route::get('/transactions', [AdminTransaction::class, 'index']);
     Route::get('/tickets', [AdminTicket::class, 'index']);

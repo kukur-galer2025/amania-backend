@@ -198,7 +198,7 @@ class EProductCheckoutController extends Controller
     {
         $request->validate([
             'course_id'     => 'required|exists:courses,id',
-            'payment_proof' => 'nullable|image|mimes:jpg,jpeg,png|max:5120',
+            'payment_proof' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:5120',
         ]);
 
         $user   = $request->user();
@@ -277,5 +277,78 @@ class EProductCheckoutController extends Controller
     public function tripayWebhook(Request $request)
     {
         return response()->json(['success' => false, 'message' => 'Tripay Webhook is deprecated.']);
+    }
+
+    // =========================================================================
+    // 5. UPLOAD ULANG BUKTI PEMBAYARAN
+    // =========================================================================
+    public function reuploadPaymentProofEProduct(Request $request, $id)
+    {
+        $user = auth()->user();
+        if (!$user) {
+            return response()->json(['success' => false, 'message' => 'Silakan login terlebih dahulu.'], 401);
+        }
+
+        $request->validate([
+            'payment_proof' => 'required|image|mimes:jpg,jpeg,png,webp|max:5120'
+        ]);
+        
+        $transaction = EProductPurchase::where('id', $id)->where('user_id', $user->id)->firstOrFail();
+
+        if (!in_array($transaction->status, ['FAILED', 'REJECTED'])) {
+            return response()->json([
+                'success' => false, 
+                'message' => 'Hanya transaksi yang ditolak/gagal yang dapat mengunggah ulang bukti.'
+            ], 400);
+        }
+
+        $paymentPath = $request->file('payment_proof')->store('payments', 'public');
+
+        $transaction->update([
+            'payment_proof' => $paymentPath,
+            'status' => 'PENDING',
+            'rejection_reason' => null
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Bukti berhasil diunggah ulang! Menunggu verifikasi Admin.',
+            'data' => $transaction
+        ]);
+    }
+
+    public function reuploadPaymentProofCourse(Request $request, $id)
+    {
+        $user = auth()->user();
+        if (!$user) {
+            return response()->json(['success' => false, 'message' => 'Silakan login terlebih dahulu.'], 401);
+        }
+
+        $request->validate([
+            'payment_proof' => 'required|image|mimes:jpg,jpeg,png,webp|max:5120'
+        ]);
+        
+        $transaction = CourseEnrollment::where('id', $id)->where('user_id', $user->id)->firstOrFail();
+
+        if (!in_array($transaction->status, ['FAILED', 'REJECTED'])) {
+            return response()->json([
+                'success' => false, 
+                'message' => 'Hanya transaksi yang ditolak/gagal yang dapat mengunggah ulang bukti.'
+            ], 400);
+        }
+
+        $paymentPath = $request->file('payment_proof')->store('payments', 'public');
+
+        $transaction->update([
+            'payment_proof' => $paymentPath,
+            'status' => 'PENDING',
+            'rejection_reason' => null
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Bukti berhasil diunggah ulang! Menunggu verifikasi Admin.',
+            'data' => $transaction
+        ]);
     }
 }

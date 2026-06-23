@@ -4,8 +4,10 @@ namespace App\Notifications;
 
 use Illuminate\Bus\Queueable;
 use Illuminate\Notifications\Notification;
+use Illuminate\Notifications\Messages\MailMessage;
+use Illuminate\Contracts\Queue\ShouldQueue;
 
-class UserStatusNotification extends Notification
+class UserStatusNotification extends Notification implements ShouldQueue
 {
     use Queueable;
 
@@ -20,7 +22,33 @@ class UserStatusNotification extends Notification
 
     public function via($notifiable)
     {
-        return ['database']; 
+        return ['database', 'mail']; 
+    }
+
+    public function toMail($notifiable)
+    {
+        $eventName = $this->registration->event->title;
+        $frontendUrl = env('FRONTEND_URL', 'http://localhost:3000');
+        
+        if ($this->status === 'verified') {
+            $url = $frontendUrl . '/my-events/' . $this->registration->event->slug;
+            return (new MailMessage)
+                ->subject('Pendaftaran Disetujui!')
+                ->greeting('Halo, ' . $notifiable->name . '!')
+                ->line('Selamat! Pembayaran untuk kelas "' . $eventName . '" telah disetujui.')
+                ->action('Masuk ke Ruang Kelas', $url)
+                ->line('Terima kasih telah belajar bersama EduTech Amania!');
+        } else {
+            $url = $frontendUrl . '/dashboard/ticket';
+            $reason = $this->registration->rejection_reason ?? 'Bukti tidak valid.';
+            return (new MailMessage)
+                ->subject('Pendaftaran Ditolak')
+                ->greeting('Halo, ' . $notifiable->name . '!')
+                ->line('Maaf, pembayaran untuk kelas "' . $eventName . '" ditolak.')
+                ->line('Alasan: ' . $reason)
+                ->action('Upload Ulang Bukti Pembayaran', $url)
+                ->line('Silakan hubungi admin jika Anda membutuhkan bantuan.');
+        }
     }
 
     public function toArray($notifiable)
