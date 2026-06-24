@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\EProduct;
+use App\Helpers\ImageHelper;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Storage;
@@ -61,7 +62,7 @@ class EProductController extends Controller
 
         // Upload Cover
         if ($request->hasFile('cover_image')) {
-            $data['cover_image'] = $request->file('cover_image')->store('e_products/covers', 'public');
+            $data['cover_image'] = ImageHelper::compressAndStore($request->file('cover_image'), 'e_products/covers', 1200, 900, 80);
         }
 
         // 🔥 LOGIKA UNTUK MENYIMPAN FILE_PATH SUDAH DIHAPUS 🔥
@@ -108,7 +109,7 @@ class EProductController extends Controller
             if ($product->cover_image && !Str::startsWith($product->cover_image, ['http://', 'https://']) && Storage::disk('public')->exists($product->cover_image)) {
                 Storage::disk('public')->delete($product->cover_image);
             }
-            $data['cover_image'] = $request->file('cover_image')->store('e_products/covers', 'public');
+            $data['cover_image'] = ImageHelper::compressAndStore($request->file('cover_image'), 'e_products/covers', 1200, 900, 80);
         }
 
         // 🔥 LOGIKA UNTUK MENGUPDATE FILE_PATH SUDAH DIHAPUS 🔥

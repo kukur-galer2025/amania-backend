@@ -13,7 +13,7 @@ class CourseTransactionController extends Controller
     {
         $user = auth()->user();
         
-        $query = CourseEnrollment::with(['user', 'course']);
+        $query = CourseEnrollment::with(['user', 'course.user']);
 
         if ($user && $user->role === 'creator') {
             $query->whereHas('course', function ($q) use ($user) {
@@ -23,13 +23,25 @@ class CourseTransactionController extends Controller
 
         $transactions = $query->latest()->get();
 
-        $formatted = $transactions->map(function ($tx) {
+        // 🔥 Kumpulkan kreator unik untuk dropdown filter 🔥
+        $creatorsMap = [];
+
+        $formatted = $transactions->map(function ($tx) use (&$creatorsMap) {
+            // Kumpulkan kreator
+            if ($tx->course && $tx->course->user) {
+                $creatorsMap[$tx->course->user->id] = $tx->course->user->name;
+            }
+
             $txArray = $tx->toArray();
             $txArray['payment_proof'] = $tx->payment_proof ? url('storage/' . $tx->payment_proof) : null;
             return $txArray;
         });
 
-        return response()->json(['success' => true, 'data' => $formatted]);
+        $creatorsList = collect($creatorsMap)->map(function ($name, $id) {
+            return ['id' => $id, 'name' => $name];
+        })->values();
+
+        return response()->json(['success' => true, 'creators' => $creatorsList, 'data' => $formatted]);
     }
 
     public function markAsPaid($id)

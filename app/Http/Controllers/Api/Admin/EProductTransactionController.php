@@ -18,7 +18,8 @@ class EProductTransactionController extends Controller
             
             $query = EProductPurchase::with([
                 'buyer:id,name,email,phone', 
-                'items.product:id,title,price,user_id' 
+                'items.product:id,title,price,user_id',
+                'items.product.author:id,name'
             ]);
 
             if ($user && $user->role === 'creator') {
@@ -36,7 +37,22 @@ class EProductTransactionController extends Controller
                 'expired_count' => $transactions->where('status', 'EXPIRED')->count(),
             ];
 
-            $formattedTransactions = $transactions->map(function ($tx) {
+            // 🔥 Kumpulkan kreator unik untuk dropdown filter 🔥
+            $creatorsMap = [];
+
+            $formattedTransactions = $transactions->map(function ($tx) use (&$creatorsMap) {
+                // Ambil nama kreator dari item pertama
+                $creatorName = null;
+                if ($tx->items && $tx->items->count() > 0) {
+                    foreach ($tx->items as $item) {
+                        if ($item->product && $item->product->author) {
+                            $creatorName = $item->product->author->name;
+                            $creatorsMap[$item->product->author->id] = $creatorName;
+                            break;
+                        }
+                    }
+                }
+
                 return [
                     'id'               => $tx->id,
                     'reference'        => $tx->reference,
@@ -48,7 +64,7 @@ class EProductTransactionController extends Controller
                     'status'           => $tx->status,
                     'created_at'       => $tx->created_at,
                     'buyer'            => $tx->buyer,
-                    // 🔥 PERBAIKAN: Tambahkan pengaman agar tidak error jika items kosong 🔥
+                    'creator_name'     => $creatorName,
                     'product_names'    => $tx->items && $tx->items->count() > 0 
                                             ? $tx->items->map(function($item) {
                                                 return $item->product ? $item->product->title : 'Produk Dihapus';
@@ -57,18 +73,24 @@ class EProductTransactionController extends Controller
                 ];
             });
 
+            // Daftar kreator unik untuk dropdown
+            $creatorsList = collect($creatorsMap)->map(function ($name, $id) {
+                return ['id' => $id, 'name' => $name];
+            })->values();
+
             return response()->json([
-                'success' => true,
-                'message' => 'Data transaksi E-Produk berhasil diambil.',
-                'stats'   => $stats,
-                'data'    => $formattedTransactions
+                'success'  => true,
+                'message'  => 'Data transaksi E-Produk berhasil diambil.',
+                'stats'    => $stats,
+                'creators' => $creatorsList,
+                'data'     => $formattedTransactions
             ], 200);
 
         } catch (\Exception $e) {
             Log::error('Admin E-Product Trx Error: ' . $e->getMessage());
             return response()->json([
                 'success' => false,
-                'message' => 'Gagal mengambil data transaksi.'
+                'message' => 'Gagal mengambil data transaksi: ' . $e->getMessage()
             ], 500);
         }
     }

@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Course;
 use App\Models\CourseSection;
 use App\Models\CourseLesson;
+use App\Helpers\ImageHelper;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Storage;
@@ -66,7 +67,7 @@ class CourseController extends Controller
         $data['user_id'] = $request->user()->id;
 
         if ($request->hasFile('thumbnail')) {
-            $data['thumbnail'] = $request->file('thumbnail')->store('courses/thumbnails', 'public');
+            $data['thumbnail'] = ImageHelper::compressAndStore($request->file('thumbnail'), 'courses/thumbnails', 1200, 900, 80);
         }
 
         $course = Course::create($data);
@@ -110,7 +111,7 @@ class CourseController extends Controller
             if ($course->thumbnail && !Str::startsWith($course->thumbnail, ['http://', 'https://']) && Storage::disk('public')->exists($course->thumbnail)) {
                 Storage::disk('public')->delete($course->thumbnail);
             }
-            $data['thumbnail'] = $request->file('thumbnail')->store('courses/thumbnails', 'public');
+            $data['thumbnail'] = ImageHelper::compressAndStore($request->file('thumbnail'), 'courses/thumbnails', 1200, 900, 80);
         }
 
         $course->update($data);

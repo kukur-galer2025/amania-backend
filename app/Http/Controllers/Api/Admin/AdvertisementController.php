@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Advertisement;
+use App\Helpers\ImageHelper;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 
@@ -29,7 +30,7 @@ class AdvertisementController extends Controller
             'order' => 'integer'
         ]);
 
-        $imagePath = $request->file('image')->store('advertisements', 'public');
+        $imagePath = ImageHelper::compressAndStore($request->file('image'), 'advertisements', 1200, 900, 80);
 
         // Parse placement: accept JSON string or comma-separated
         $placement = $this->parsePlacement($request->placement);
@@ -78,7 +79,7 @@ class AdvertisementController extends Controller
             if ($ad->image_path && Storage::disk('public')->exists($ad->image_path)) {
                 Storage::disk('public')->delete($ad->image_path);
             }
-            $data['image_path'] = $request->file('image')->store('advertisements', 'public');
+            $data['image_path'] = ImageHelper::compressAndStore($request->file('image'), 'advertisements', 1200, 900, 80);
         }
 
         $ad->update($data);

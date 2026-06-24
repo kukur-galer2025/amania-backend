@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Event;
+use App\Helpers\ImageHelper;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Storage;
@@ -69,7 +70,7 @@ class EventController extends Controller
 
         return DB::transaction(function () use ($request, $validated) {
             if ($request->hasFile('image')) {
-                $validated['image'] = $request->file('image')->store('events', 'public');
+                $validated['image'] = ImageHelper::compressAndStore($request->file('image'), 'events', 1200, 900, 80);
             }
 
             $validated['slug'] = Str::slug($request->title) . '-' . uniqid();
@@ -137,7 +138,7 @@ class EventController extends Controller
                 if ($event->image) {
                     Storage::disk('public')->delete($event->image);
                 }
-                $validated['image'] = $request->file('image')->store('events', 'public');
+                $validated['image'] = ImageHelper::compressAndStore($request->file('image'), 'events', 1200, 900, 80);
             }
 
             if ($request->title !== $event->title) {

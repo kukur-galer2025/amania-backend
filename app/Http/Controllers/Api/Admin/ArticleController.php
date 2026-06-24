@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Article;
+use App\Helpers\ImageHelper;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Storage;
@@ -66,7 +67,7 @@ class ArticleController extends Controller
 
         $imagePath = null;
         if ($request->hasFile('image')) {
-            $imagePath = $request->file('image')->store('articles', 'public');
+            $imagePath = ImageHelper::compressAndStore($request->file('image'), 'articles', 1200, 900, 80);
         }
 
         $tags = $request->tags;
@@ -142,7 +143,7 @@ class ArticleController extends Controller
             if ($article->image && Storage::disk('public')->exists($article->image)) {
                 Storage::disk('public')->delete($article->image);
             }
-            $data['image'] = $request->file('image')->store('articles', 'public');
+            $data['image'] = ImageHelper::compressAndStore($request->file('image'), 'articles', 1200, 900, 80);
         }
 
         $article->update($data);
