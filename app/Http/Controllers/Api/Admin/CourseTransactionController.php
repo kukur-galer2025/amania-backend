@@ -13,7 +13,8 @@ class CourseTransactionController extends Controller
     {
         $user = auth()->user();
         
-        $query = CourseEnrollment::with(['user', 'course.user']);
+        // PENTING: Course model pakai relasi 'instructor()' bukan 'user()'
+        $query = CourseEnrollment::with(['user', 'course.instructor']);
 
         if ($user && $user->role === 'creator') {
             $query->whereHas('course', function ($q) use ($user) {
@@ -23,17 +24,30 @@ class CourseTransactionController extends Controller
 
         $transactions = $query->latest()->get();
 
+        $stats = [
+            'total_revenue' => (int) $transactions->whereIn('status', ['PAID', 'SETTLED', 'verified', 'berhasil', 'LUNAS'])->sum('amount'),
+            'paid_count'    => $transactions->whereIn('status', ['PAID', 'SETTLED', 'verified', 'berhasil', 'LUNAS'])->count(),
+            'unpaid_count'  => $transactions->whereIn('status', ['UNPAID', 'pending', 'menunggu'])->count(),
+            'expired_count' => $transactions->whereIn('status', ['EXPIRED', 'failed', 'cancelled', 'gagal'])->count(),
+        ];
+
         // 🔥 Kumpulkan kreator unik untuk dropdown filter 🔥
         $creatorsMap = [];
 
         $formatted = $transactions->map(function ($tx) use (&$creatorsMap) {
-            // Kumpulkan kreator
-            if ($tx->course && $tx->course->user) {
-                $creatorsMap[$tx->course->user->id] = $tx->course->user->name;
+            // Kumpulkan kreator via relasi 'instructor'
+            if ($tx->course && $tx->course->instructor) {
+                $creatorsMap[$tx->course->instructor->id] = $tx->course->instructor->name;
             }
 
             $txArray = $tx->toArray();
             $txArray['payment_proof'] = $tx->payment_proof ? url('storage/' . $tx->payment_proof) : null;
+            
+            // Tambahkan field 'user' di dalam 'course' untuk kompatibilitas frontend
+            if ($tx->course && $tx->course->instructor) {
+                $txArray['course']['user'] = $tx->course->instructor->toArray();
+            }
+            
             return $txArray;
         });
 
@@ -41,7 +55,12 @@ class CourseTransactionController extends Controller
             return ['id' => $id, 'name' => $name];
         })->values();
 
-        return response()->json(['success' => true, 'creators' => $creatorsList, 'data' => $formatted]);
+        return response()->json([
+            'success' => true, 
+            'creators' => $creatorsList, 
+            'stats' => $stats,
+            'data' => $formatted
+        ]);
     }
 
     public function markAsPaid($id)
