@@ -62,4 +62,9 @@ class User extends Authenticatable
     {
         return $this->hasMany(EProduct::class, 'user_id');
     }
+
+    public function withdrawals()
+    {
+        return $this->hasMany(Withdrawal::class, 'user_id');
+    }
 }

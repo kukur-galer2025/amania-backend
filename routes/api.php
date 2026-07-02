@@ -43,6 +43,7 @@ use App\Http\Controllers\Api\Admin\ImageUploadController;
 use App\Http\Controllers\Api\Admin\EProductTransactionController as AdminEProductTransaction;
 use App\Http\Controllers\Api\Admin\EProductMaterialController as AdminEProductMaterial;
 use App\Http\Controllers\Api\Admin\CourseCategoryController as AdminCourseCategory;
+use App\Http\Controllers\Api\Admin\WithdrawalController;
 use App\Http\Controllers\Api\Admin\CourseController as AdminCourse;
 use App\Http\Controllers\Api\Admin\CourseTransactionController as AdminCourseTransaction;
 use App\Http\Controllers\Api\Admin\CourseSectionController as AdminCourseSection;
@@ -111,6 +112,14 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::get('/notifications', [NotificationController::class, 'index']);
     Route::post('/notifications/read', [NotificationController::class, 'markAllAsRead']);
+    Route::get('/withdrawals/stats', [WithdrawalController::class, 'stats']);
+    Route::get('/withdrawals', [WithdrawalController::class, 'index']);
+    Route::post('/withdrawals', [WithdrawalController::class, 'store']);
+    Route::post('/withdrawals/{id}/approve', [WithdrawalController::class, 'approve']);
+    Route::post('/withdrawals/{id}/reject', [WithdrawalController::class, 'reject']);
+
+    // Stats Global (dipindah ke Dashboard untuk admin)
+    Route::get('/dashboard', [AdminDashboard::class, 'index']);
     
     // 🔥 API KERANJANG BELANJA (CART) 🔥
     Route::get('/cart', [CartController::class, 'index']);
@@ -234,6 +243,21 @@ Route::middleware(['auth:sanctum', 'role:superadmin|creator'])->prefix('admin')-
     Route::post('/articles', [AdminArticle::class, 'store']);
     Route::post('/articles/{id}', [AdminArticle::class, 'update']); 
     Route::delete('/articles/{id}', [AdminArticle::class, 'destroy']);
+
+    // Task Management (Creator & Superadmin)
+    Route::get('/tasks', [\App\Http\Controllers\Api\Admin\TaskController::class, 'index']);
+    Route::post('/tasks', [\App\Http\Controllers\Api\Admin\TaskController::class, 'store']);
+    Route::put('/tasks/{id}', [\App\Http\Controllers\Api\Admin\TaskController::class, 'update']);
+    Route::post('/tasks/{id}/toggle', [\App\Http\Controllers\Api\Admin\TaskController::class, 'toggleStatus']);
+    Route::post('/tasks/{id}/move', [\App\Http\Controllers\Api\Admin\TaskController::class, 'moveTask']);
+    Route::delete('/tasks/{id}', [\App\Http\Controllers\Api\Admin\TaskController::class, 'destroy']);
+    // Subtasks
+    Route::post('/tasks/{taskId}/subtasks', [\App\Http\Controllers\Api\Admin\TaskController::class, 'addSubtask']);
+    Route::post('/tasks/{taskId}/subtasks/{subtaskId}/toggle', [\App\Http\Controllers\Api\Admin\TaskController::class, 'toggleSubtask']);
+    Route::delete('/tasks/{taskId}/subtasks/{subtaskId}', [\App\Http\Controllers\Api\Admin\TaskController::class, 'deleteSubtask']);
+    // Comments
+    Route::post('/tasks/{taskId}/comments', [\App\Http\Controllers\Api\Admin\TaskController::class, 'addComment']);
+    Route::delete('/tasks/{taskId}/comments/{commentId}', [\App\Http\Controllers\Api\Admin\TaskController::class, 'deleteComment']);
 });
 
 // =========================================================================
