@@ -13,13 +13,13 @@ class WithdrawalController extends Controller
 {
     private function calculateCreatorStats($userId)
     {
-        $courseRevenue = CourseEnrollment::whereHas('course', function ($q) use ($userId) {
+        $courseRevenue = (int) (CourseEnrollment::whereHas('course', function ($q) use ($userId) {
             $q->where('user_id', $userId);
-        })->whereIn('status', ['PAID', 'SETTLED', 'verified', 'berhasil'])->sum('amount');
+        })->whereIn('status', ['PAID', 'SETTLED', 'verified', 'berhasil'])->sum('amount') * 0.7);
 
-        $eproductRevenue = EProductPurchase::whereHas('items.product', function ($q) use ($userId) {
+        $eproductRevenue = (int) (EProductPurchase::whereHas('items.product', function ($q) use ($userId) {
             $q->where('user_id', $userId);
-        })->whereIn('status', ['PAID', 'SETTLED', 'verified', 'berhasil'])->sum('amount');
+        })->whereIn('status', ['PAID', 'SETTLED', 'verified', 'berhasil'])->sum('amount') * 0.7);
 
         $totalRevenue = $courseRevenue + $eproductRevenue;
 

@@ -53,14 +53,13 @@ class DashboardController extends Controller
             $totalCourses = \App\Models\Course::where('user_id', $currentUser->id)->count();
             $totalEproducts = \App\Models\EProduct::where('user_id', $currentUser->id)->count();
 
-            // 1. Total Pendapatan Creator
-            $courseRevenue = \App\Models\CourseEnrollment::whereHas('course', function ($q) use ($currentUser) {
+            $courseRevenue = (int) (\App\Models\CourseEnrollment::whereHas('course', function ($q) use ($currentUser) {
                 $q->where('user_id', $currentUser->id);
-            })->whereIn('status', ['PAID', 'SETTLED', 'verified', 'berhasil'])->sum('amount');
+            })->whereIn('status', ['PAID', 'SETTLED', 'verified', 'berhasil'])->sum('amount') * 0.7);
 
-            $eproductRevenue = \App\Models\EProductPurchase::whereHas('items.product', function ($q) use ($currentUser) {
+            $eproductRevenue = (int) (\App\Models\EProductPurchase::whereHas('items.product', function ($q) use ($currentUser) {
                 $q->where('user_id', $currentUser->id);
-            })->whereIn('status', ['PAID', 'SETTLED', 'verified', 'berhasil'])->sum('amount');
+            })->whereIn('status', ['PAID', 'SETTLED', 'verified', 'berhasil'])->sum('amount') * 0.7);
 
             $totalPendapatan = $courseRevenue + $eproductRevenue;
 
