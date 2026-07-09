@@ -201,7 +201,88 @@ class EProductController extends Controller
     }
 
     /**
-     * 🔥 UNDUH MATERI (FORCE DOWNLOAD) 🔥
+     * 🚀 GENERATE SIGNED URL UNTUK DOWNLOAD CEPAT 🚀
+     * Frontend memanggil ini dulu untuk mendapatkan link download sementara.
+     */
+    public function getDownloadUrl(Request $request, $id)
+    {
+        $material = \App\Models\EProductMaterial::findOrFail($id);
+
+        // 🔥 CEK KEPEMILIKAN MENGGUNAKAN RELASI ITEMS 🔥
+        $hasPurchased = EProductPurchase::where('user_id', $request->user()->id)
+            ->whereHas('items', function($q) use ($material) {
+                $q->where('e_product_id', $material->e_product_id);
+            })
+            ->whereIn('status', ['PAID', 'success', 'SETTLED'])
+            ->exists();
+
+        if (!$hasPurchased) {
+            return response()->json(['success' => false, 'message' => 'Akses ditolak. Anda belum memiliki akses ke materi ini.'], 403);
+        }
+
+        $filePath = storage_path('app/public/' . $material->file_path);
+
+        if (!file_exists($filePath)) {
+            return response()->json(['success' => false, 'message' => 'File tidak ditemukan di server.'], 404);
+        }
+
+        // Generate signed URL (berlaku 5 menit)
+        $signature = hash_hmac('sha256', $id . '|' . floor(time() / 300), config('app.key'));
+
+        $ext = pathinfo($filePath, PATHINFO_EXTENSION);
+        $fileName = $material->title . '.' . $ext;
+
+        return response()->json([
+            'success' => true,
+            'url' => url("/api/e-product-materials/{$id}/direct-download?signature={$signature}"),
+            'filename' => $fileName
+        ]);
+    }
+
+    /**
+     * 🔥 DIRECT DOWNLOAD MENGGUNAKAN SIGNED URL (TANPA AUTH HEADER) 🔥
+     * Browser langsung download tanpa perlu Authorization header.
+     */
+    public function directDownload(Request $request, $id)
+    {
+        $signature = $request->query('signature');
+
+        if (!$signature) {
+            return response()->json(['success' => false, 'message' => 'Link download tidak valid.'], 403);
+        }
+
+        // Verifikasi signature (berlaku 5 menit)
+        $expectedSignature = hash_hmac('sha256', $id . '|' . floor(time() / 300), config('app.key'));
+
+        if (!hash_equals($expectedSignature, $signature)) {
+            return response()->json(['success' => false, 'message' => 'Link download sudah kedaluwarsa. Silakan coba lagi.'], 403);
+        }
+
+        $material = \App\Models\EProductMaterial::findOrFail($id);
+        $filePath = storage_path('app/public/' . $material->file_path);
+
+        if (!file_exists($filePath)) {
+            return response()->json(['success' => false, 'message' => 'File tidak ditemukan di server.'], 404);
+        }
+
+        $ext = pathinfo($filePath, PATHINFO_EXTENSION);
+        $fileName = $material->title . '.' . $ext;
+
+        return response()->streamDownload(function () use ($filePath) {
+            $stream = fopen($filePath, 'rb');
+            while (!feof($stream)) {
+                echo fread($stream, 8192); // Stream 8KB per chunk
+                flush();
+            }
+            fclose($stream);
+        }, $fileName, [
+            'Content-Type' => mime_content_type($filePath),
+            'Content-Length' => filesize($filePath),
+        ]);
+    }
+
+    /**
+     * 🔥 UNDUH MATERI (FALLBACK - LEGACY) 🔥
      */
     public function downloadMaterial(Request $request, $id)
     {

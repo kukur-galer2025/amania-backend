@@ -94,6 +94,9 @@ Route::post('/ai/course-advisor', [CourseController::class, 'askCourseAdvisor'])
 Route::get('/courses/lessons/{lessonId}/download', [CourseController::class, 'downloadLessonFile']);
 Route::get('/my-courses/{slug}/certificate', [CourseController::class, 'downloadCertificate']);
 
+// 🚀 Direct Download E-Product Material via Signed URL (Tanpa Auth Header)
+Route::get('/e-product-materials/{id}/direct-download', [EProductController::class, 'directDownload']);
+
 Route::post('/tripay/callback', [EProductCheckoutController::class, 'tripayWebhook']);
 
 // =========================================================================
@@ -132,6 +135,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/my-e-products', [EProductController::class, 'myProducts']);
     Route::get('/my-e-products/{slug}', [EProductController::class, 'myProductDetail']);
     Route::get('/my-e-products/materials/{id}/download', [EProductController::class, 'downloadMaterial']);
+    Route::get('/my-e-products/materials/{id}/download-url', [EProductController::class, 'getDownloadUrl']);
 
     Route::post('/e-products/{id}/reviews', [EProductController::class, 'submitReview']);
     
