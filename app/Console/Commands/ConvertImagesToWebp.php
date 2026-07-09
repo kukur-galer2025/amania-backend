@@ -38,11 +38,14 @@ class ConvertImagesToWebp extends Command
         $articles = Article::all();
         foreach ($articles as $article) {
             if ($article->image) {
-                $newPath = $this->convertToWebp($article->image);
-                if ($newPath && $newPath !== $article->image) {
+                $oldImagePath = $article->image;
+                $newPath = $this->convertToWebp($oldImagePath);
+                if ($newPath && $newPath !== $oldImagePath) {
                     $article->image = $newPath;
-                    $article->save();
-                    $this->line("Converted: {$newPath}");
+                    if ($article->save()) {
+                        Storage::disk('public')->delete($oldImagePath);
+                        $this->line("Converted: {$newPath}");
+                    }
                 }
             }
         }
@@ -52,11 +55,14 @@ class ConvertImagesToWebp extends Command
         $courses = Course::all();
         foreach ($courses as $course) {
             if ($course->thumbnail) {
-                $newPath = $this->convertToWebp($course->thumbnail);
-                if ($newPath && $newPath !== $course->thumbnail) {
+                $oldImagePath = $course->thumbnail;
+                $newPath = $this->convertToWebp($oldImagePath);
+                if ($newPath && $newPath !== $oldImagePath) {
                     $course->thumbnail = $newPath;
-                    $course->save();
-                    $this->line("Converted: {$newPath}");
+                    if ($course->save()) {
+                        Storage::disk('public')->delete($oldImagePath);
+                        $this->line("Converted: {$newPath}");
+                    }
                 }
             }
         }
@@ -66,11 +72,14 @@ class ConvertImagesToWebp extends Command
         $products = EProduct::all();
         foreach ($products as $product) {
             if ($product->cover_image) {
-                $newPath = $this->convertToWebp($product->cover_image);
-                if ($newPath && $newPath !== $product->cover_image) {
+                $oldImagePath = $product->cover_image;
+                $newPath = $this->convertToWebp($oldImagePath);
+                if ($newPath && $newPath !== $oldImagePath) {
                     $product->cover_image = $newPath;
-                    $product->save();
-                    $this->line("Converted: {$newPath}");
+                    if ($product->save()) {
+                        Storage::disk('public')->delete($oldImagePath);
+                        $this->line("Converted: {$newPath}");
+                    }
                 }
             }
         }
@@ -80,11 +89,14 @@ class ConvertImagesToWebp extends Command
         $users = User::all();
         foreach ($users as $user) {
             if ($user->avatar && !filter_var($user->avatar, FILTER_VALIDATE_URL)) {
-                $newPath = $this->convertToWebp($user->avatar);
-                if ($newPath && $newPath !== $user->avatar) {
+                $oldImagePath = $user->avatar;
+                $newPath = $this->convertToWebp($oldImagePath);
+                if ($newPath && $newPath !== $oldImagePath) {
                     $user->avatar = $newPath;
-                    $user->save();
-                    $this->line("Converted: {$newPath}");
+                    if ($user->save()) {
+                        Storage::disk('public')->delete($oldImagePath);
+                        $this->line("Converted: {$newPath}");
+                    }
                 }
             }
         }
@@ -142,8 +154,8 @@ class ConvertImagesToWebp extends Command
         imagedestroy($image);
 
         if ($success) {
-            // Delete old file
-            $disk->delete($oldPath);
+            // Do NOT delete the old file here. Just return the new path.
+            // We will delete the old file after the database is successfully updated.
             return $newPath;
         }
 
