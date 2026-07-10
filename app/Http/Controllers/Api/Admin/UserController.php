@@ -7,6 +7,7 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
+use App\Helpers\ImageHelper;
 
 class UserController extends Controller
 {
@@ -43,9 +44,9 @@ class UserController extends Controller
         $data = $request->only(['name', 'email', 'phone', 'role']);
         $data['password'] = Hash::make($request->password);
 
-        // Proses Upload Avatar jika ada
+        // Proses Upload Avatar jika ada (otomatis dikonversi ke WebP)
         if ($request->hasFile('avatar')) {
-            $data['avatar'] = $request->file('avatar')->store('avatars', 'public');
+            $data['avatar'] = ImageHelper::compressAndStore($request->file('avatar'), 'avatars', 600, 600, 80);
         }
 
         $user = User::create($data);
@@ -80,13 +81,13 @@ class UserController extends Controller
             $data['password'] = Hash::make($request->password);
         }
 
-        // Proses Upload Avatar jika ada file baru
+        // Proses Upload Avatar jika ada file baru (otomatis dikonversi ke WebP)
         if ($request->hasFile('avatar')) {
             // Hapus avatar lama dari storage jika ada
             if ($user->avatar && Storage::disk('public')->exists($user->avatar)) {
                 Storage::disk('public')->delete($user->avatar);
             }
-            $data['avatar'] = $request->file('avatar')->store('avatars', 'public');
+            $data['avatar'] = ImageHelper::compressAndStore($request->file('avatar'), 'avatars', 600, 600, 80);
         }
 
         $user->update($data);

@@ -10,6 +10,7 @@ use App\Notifications\AdminAlertNotification;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
+use App\Helpers\ImageHelper;
 
 class RegistrationController extends Controller
 {
@@ -78,7 +79,7 @@ class RegistrationController extends Controller
                 ], 400);
             }
             
-            $paymentPath = $request->file('payment_proof')->store('payments', 'public');
+            $paymentPath = ImageHelper::compressAndStore($request->file('payment_proof'), 'payments', 1200, 1600, 80);
             $status = 'pending';
             $returnMessage = 'Pembayaran berhasil diunggah. Menunggu konfirmasi Admin Amania (Maks 1x24 Jam).';
         }
@@ -136,7 +137,7 @@ class RegistrationController extends Controller
             ], 400);
         }
 
-        $paymentPath = $request->file('payment_proof')->store('payments', 'public');
+        $paymentPath = ImageHelper::compressAndStore($request->file('payment_proof'), 'payments', 1200, 1600, 80);
 
         $registration->update([
             'payment_proof' => $paymentPath,

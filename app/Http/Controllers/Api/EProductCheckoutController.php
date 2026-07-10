@@ -12,6 +12,7 @@ use App\Models\CourseEnrollment;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use App\Helpers\ImageHelper;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
@@ -151,7 +152,7 @@ class EProductCheckoutController extends Controller
                 return response()->json(['success' => false, 'message' => 'Bukti pembayaran wajib diunggah.'], 400);
             }
 
-            $paymentPath = $request->file('payment_proof')->store('payments', 'public');
+            $paymentPath = ImageHelper::compressAndStore($request->file('payment_proof'), 'payments', 1200, 1600, 80);
 
             $purchase = EProductPurchase::create([
                 'reference'        => $merchantRef, 
@@ -246,7 +247,7 @@ class EProductCheckoutController extends Controller
                 return response()->json(['success' => false, 'message' => 'Bukti pembayaran wajib diunggah.'], 400);
             }
 
-            $paymentPath = $request->file('payment_proof')->store('payments', 'public');
+            $paymentPath = ImageHelper::compressAndStore($request->file('payment_proof'), 'payments', 1200, 1600, 80);
 
             CourseEnrollment::create([
                 'reference'        => $merchantRef,
@@ -302,7 +303,7 @@ class EProductCheckoutController extends Controller
             ], 400);
         }
 
-        $paymentPath = $request->file('payment_proof')->store('payments', 'public');
+        $paymentPath = ImageHelper::compressAndStore($request->file('payment_proof'), 'payments', 1200, 1600, 80);
 
         $transaction->update([
             'payment_proof' => $paymentPath,
@@ -337,7 +338,7 @@ class EProductCheckoutController extends Controller
             ], 400);
         }
 
-        $paymentPath = $request->file('payment_proof')->store('payments', 'public');
+        $paymentPath = ImageHelper::compressAndStore($request->file('payment_proof'), 'payments', 1200, 1600, 80);
 
         $transaction->update([
             'payment_proof' => $paymentPath,

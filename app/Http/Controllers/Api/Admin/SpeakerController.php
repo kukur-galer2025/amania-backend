@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Speaker;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
+use App\Helpers\ImageHelper;
 
 class SpeakerController extends Controller
 {
@@ -20,7 +21,7 @@ class SpeakerController extends Controller
         ]);
 
         if ($request->hasFile('photo')) {
-            $validated['photo'] = $request->file('photo')->store('speakers', 'public');
+            $validated['photo'] = ImageHelper::compressAndStore($request->file('photo'), 'speakers', 400, 400, 80);
         }
 
         $speaker = Speaker::create($validated);

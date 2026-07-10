@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
+use App\Helpers\ImageHelper;
 
 class ImageUploadController extends Controller
 {
@@ -14,8 +15,8 @@ class ImageUploadController extends Controller
         ]);
 
         if ($request->hasFile('image')) {
-            // Simpan gambar ke folder 'public/questions'
-            $path = $request->file('image')->store('questions', 'public');
+            // Simpan gambar ke folder 'public/questions' dengan kompresi WebP
+            $path = ImageHelper::compressAndStore($request->file('image'), 'questions', 1000, 1000, 80);
             
             // Kembalikan URL lengkapnya ke frontend
             return response()->json([

@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
+use App\Helpers\ImageHelper;
 
 class ProfileController extends Controller
 {
@@ -43,8 +44,8 @@ class ProfileController extends Controller
                 Storage::disk('public')->delete($user->avatar);
             }
             
-            // Simpan foto baru ke folder storage/app/public/avatars
-            $path = $request->file('avatar')->store('avatars', 'public');
+            // Simpan foto baru ke folder storage/app/public/avatars dengan kompresi WebP
+            $path = ImageHelper::compressAndStore($request->file('avatar'), 'avatars', 600, 600, 80);
             $user->avatar = $path;
         }
 
