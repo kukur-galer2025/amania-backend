@@ -4,6 +4,7 @@ use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Auth\AuthenticationException;
+use Illuminate\Http\Exceptions\PostTooLargeException;
 use Illuminate\Http\Request;
 
 return Application::configure(basePath: dirname(__DIR__))
@@ -29,6 +30,16 @@ return Application::configure(basePath: dirname(__DIR__))
                     'success' => false,
                     'message' => 'Unauthenticated. Silakan login terlebih dahulu.',
                 ], 401);
+            }
+        });
+
+        // 🔥 Tangani error jika ukuran file melebihi post_max_size di server
+        $exceptions->render(function (PostTooLargeException $e, Request $request) {
+            if ($request->is('api/*') || $request->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Ukuran file terlalu besar! Silakan perkecil file atau tingkatkan batas "post_max_size" di pengaturan server Anda.',
+                ], 413);
             }
         });
     })->create();
