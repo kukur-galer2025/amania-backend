@@ -80,8 +80,8 @@ class RegistrationController extends Controller
             }
             
             $paymentPath = ImageHelper::compressAndStore($request->file('payment_proof'), 'payments', 1200, 1600, 80);
-            $status = 'pending';
-            $returnMessage = 'Pembayaran berhasil diunggah. Menunggu konfirmasi Admin Amania (Maks 1x24 Jam).';
+            $status = 'verified'; // 🔥 AUTO-APPROVE: Langsung verified, Admin cek mutasi belakangan
+            $returnMessage = 'Pembayaran berhasil! Akses Anda telah aktif. Selamat mengikuti kelas!';
         }
 
         $eventPrefix = str_pad($event->id, 3, '0', STR_PAD_LEFT);
@@ -141,7 +141,7 @@ class RegistrationController extends Controller
 
         $registration->update([
             'payment_proof' => $paymentPath,
-            'status' => 'pending',
+            'status' => 'verified', // 🔥 AUTO-APPROVE: Langsung verified
             'rejection_reason' => null
         ]);
 
@@ -157,7 +157,7 @@ class RegistrationController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Bukti berhasil diunggah ulang! Menunggu verifikasi Admin Amania.',
+            'message' => 'Bukti berhasil diunggah ulang! Akses Anda telah aktif kembali.',
             'data' => $registration
         ]);
     }

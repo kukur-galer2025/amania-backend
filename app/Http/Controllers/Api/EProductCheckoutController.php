@@ -160,7 +160,7 @@ class EProductCheckoutController extends Controller
                 'amount'           => $totalAmount,
                 'payment_method'   => 'MANUAL_QRIS', 
                 'payment_proof'    => $paymentPath,
-                'status'           => 'PENDING',
+                'status'           => 'PAID', // 🔥 AUTO-APPROVE: Langsung PAID, Admin cek mutasi belakangan
             ]);
 
             foreach ($itemsToSave as $item) {
@@ -179,7 +179,7 @@ class EProductCheckoutController extends Controller
 
             return response()->json([
                 'success'      => true,
-                'message'      => 'Pesanan berhasil dibuat! Menunggu verifikasi admin.',
+                'message'      => 'Pembayaran berhasil! Akses produk Anda telah aktif.',
             ]);
 
         } catch (\Exception $e) {
@@ -256,13 +256,13 @@ class EProductCheckoutController extends Controller
                 'amount'           => $totalAmount,
                 'payment_method'   => 'MANUAL_QRIS',
                 'payment_proof'    => $paymentPath,
-                'status'           => 'PENDING',
+                'status'           => 'PAID', // 🔥 AUTO-APPROVE: Langsung PAID, Admin cek mutasi belakangan
             ]);
 
             DB::commit();
             return response()->json([
                 'success'      => true,
-                'message'      => 'Pesanan kursus berhasil dibuat! Menunggu verifikasi admin.',
+                'message'      => 'Pembayaran berhasil! Akses kursus Anda telah aktif.',
             ]);
 
         } catch (\Exception $e) {
@@ -307,13 +307,13 @@ class EProductCheckoutController extends Controller
 
         $transaction->update([
             'payment_proof' => $paymentPath,
-            'status' => 'PENDING',
+            'status' => 'PAID', // 🔥 AUTO-APPROVE: Langsung PAID
             'rejection_reason' => null
         ]);
 
         return response()->json([
             'success' => true,
-            'message' => 'Bukti berhasil diunggah ulang! Menunggu verifikasi Admin.',
+            'message' => 'Bukti berhasil diunggah ulang! Akses produk Anda telah aktif kembali.',
             'data' => $transaction
         ]);
     }
@@ -342,13 +342,13 @@ class EProductCheckoutController extends Controller
 
         $transaction->update([
             'payment_proof' => $paymentPath,
-            'status' => 'PENDING',
+            'status' => 'PAID', // 🔥 AUTO-APPROVE: Langsung PAID
             'rejection_reason' => null
         ]);
 
         return response()->json([
             'success' => true,
-            'message' => 'Bukti berhasil diunggah ulang! Menunggu verifikasi Admin.',
+            'message' => 'Bukti berhasil diunggah ulang! Akses kursus Anda telah aktif kembali.',
             'data' => $transaction
         ]);
     }
