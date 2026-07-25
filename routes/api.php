@@ -21,6 +21,7 @@ use App\Http\Controllers\Api\CourseController;
 use App\Http\Controllers\Api\EProductCheckoutController;
 use App\Http\Controllers\Api\LessonCommentController;
 use App\Http\Controllers\Api\CartController; // 🔥 IMPORT CART CONTROLLER 🔥
+use App\Http\Controllers\Api\VideoStreamController;
 
 // --- 3. Import Admin Controllers ---
 use App\Http\Controllers\Api\Admin\EventController as AdminEvent;
@@ -99,6 +100,9 @@ Route::get('/e-product-materials/{id}/direct-download', [EProductController::cla
 
 Route::post('/tripay/callback', [EProductCheckoutController::class, 'tripayWebhook']);
 
+// 🔥 PROTECTED VIDEO STREAMING (Signed URL, tanpa auth header)
+Route::get('/video/stream', [VideoStreamController::class, 'stream'])->name('video.stream');
+
 // =========================================================================
 // SECTION 2: MEMBER ROUTES (Wajib Login)
 // =========================================================================
@@ -112,6 +116,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/register-event', [RegistrationController::class, 'store']);
     Route::get('/my-registrations', [RegistrationController::class, 'myRegistrations']);
     Route::post('/registrations/{id}/reupload', [RegistrationController::class, 'reuploadProof']);
+
+    // 🔥 PROTECTED VIDEO: Get signed streaming URL (requires auth)
+    Route::post('/video/signed-url', [VideoStreamController::class, 'getSignedUrl']);
 
     Route::get('/notifications', [NotificationController::class, 'index']);
     Route::post('/notifications/read', [NotificationController::class, 'markAllAsRead']);
@@ -217,6 +224,10 @@ Route::middleware(['auth:sanctum', 'role:superadmin|creator'])->prefix('admin')-
     Route::put('/courses/{courseId}/lessons/{lessonId}', [AdminCourseLesson::class, 'update']);
     Route::delete('/courses/{courseId}/lessons/{lessonId}', [AdminCourseLesson::class, 'destroy']);
     Route::get('/courses/{courseId}/lessons/{lessonId}/download', [AdminCourseLesson::class, 'downloadFile']);
+
+    // 🔥 CHUNKED UPLOAD (untuk file video besar)
+    Route::post('/chunked-upload/chunk', [\App\Http\Controllers\Api\Admin\ChunkedUploadController::class, 'uploadChunk']);
+    Route::post('/chunked-upload/merge', [\App\Http\Controllers\Api\Admin\ChunkedUploadController::class, 'mergeChunks']);
 
     // Ujian / Kuis (Creator & Superadmin)
     Route::get('/courses/{courseId}/exam', [\App\Http\Controllers\Api\AdminExamController::class, 'show']);

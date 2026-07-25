@@ -15,6 +15,7 @@ class Material extends Model
         'type', 
         'access_tier', // 🔥 Kolom baru ditambahkan
         'file_path', 
+        'video_path',
         'link'
     ];
 

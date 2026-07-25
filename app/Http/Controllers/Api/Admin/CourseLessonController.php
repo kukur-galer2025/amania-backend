@@ -32,7 +32,8 @@ class CourseLessonController extends Controller
         ];
 
         if ($type === 'video') {
-            $rules['youtube_url'] = 'required|string';
+            $rules['youtube_url'] = 'nullable|string';
+            $rules['video_upload'] = 'nullable|file|mimes:mp4,webm,mov,avi|max:524288'; // 512MB
         } elseif ($type === 'text') {
             $rules['text_content'] = 'required|string';
         } elseif ($type === 'file') {
@@ -57,6 +58,20 @@ class CourseLessonController extends Controller
             $file = $request->file('file_upload');
             $data['file_path'] = $file->store('courses/lessons/files', 'public');
             $data['file_name'] = $file->getClientOriginalName();
+        }
+
+        // 🔥 Handle self-hosted video upload (direct or chunked)
+        if ($type === 'video') {
+            if ($request->hasFile('video_upload')) {
+                // Direct upload (file kecil)
+                $video = $request->file('video_upload');
+                $data['video_path'] = $video->store('courses/lessons/videos', 'public');
+                $data['video_disk'] = 'public';
+            } elseif ($request->filled('video_path')) {
+                // Chunked upload (file sudah di-merge oleh ChunkedUploadController)
+                $data['video_path'] = $request->video_path;
+                $data['video_disk'] = 'public';
+            }
         }
 
         $lesson = CourseLesson::create($data);
@@ -90,7 +105,8 @@ class CourseLessonController extends Controller
         ];
 
         if ($type === 'video') {
-            $rules['youtube_url'] = 'required|string';
+            $rules['youtube_url'] = 'nullable|string';
+            $rules['video_upload'] = 'nullable|file|mimes:mp4,webm,mov,avi|max:524288'; // 512MB
         } elseif ($type === 'text') {
             $rules['text_content'] = 'required|string';
         } elseif ($type === 'file') {
@@ -129,6 +145,35 @@ class CourseLessonController extends Controller
             $data['file_name'] = null;
         }
 
+        // 🔥 Handle self-hosted video upload on update (direct or chunked)
+        if ($type === 'video') {
+            $newVideoPath = null;
+            if ($request->hasFile('video_upload')) {
+                $video = $request->file('video_upload');
+                $newVideoPath = $video->store('courses/lessons/videos', 'public');
+            } elseif ($request->filled('video_path') && $request->video_path !== $lesson->video_path) {
+                $newVideoPath = $request->video_path;
+            }
+
+            if ($newVideoPath) {
+                // Delete old video if exists
+                if ($lesson->video_path && Storage::disk($lesson->video_disk ?? 'public')->exists($lesson->video_path)) {
+                    Storage::disk($lesson->video_disk ?? 'public')->delete($lesson->video_path);
+                }
+                $data['video_path'] = $newVideoPath;
+                $data['video_disk'] = 'public';
+            }
+        }
+
+        // Clear video fields if type changed away from video
+        if ($type !== 'video') {
+            if ($lesson->video_path && Storage::disk($lesson->video_disk ?? 'public')->exists($lesson->video_path)) {
+                Storage::disk($lesson->video_disk ?? 'public')->delete($lesson->video_path);
+            }
+            $data['video_path'] = null;
+            $data['youtube_url'] = null;
+        }
+
         $lesson->update($data);
 
         return response()->json([
@@ -153,6 +198,10 @@ class CourseLessonController extends Controller
         // Delete physical file if exists
         if ($lesson->file_path && Storage::disk('public')->exists($lesson->file_path)) {
             Storage::disk('public')->delete($lesson->file_path);
+        }
+        // Delete video file if exists
+        if ($lesson->video_path && Storage::disk($lesson->video_disk ?? 'public')->exists($lesson->video_path)) {
+            Storage::disk($lesson->video_disk ?? 'public')->delete($lesson->video_path);
         }
 
         $lesson->delete();

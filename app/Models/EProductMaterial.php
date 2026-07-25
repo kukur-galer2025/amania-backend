@@ -15,6 +15,7 @@ class EProductMaterial extends Model
         'title',
         'type',
         'file_path',
+        'video_path',
         'link_url',
     ];
 

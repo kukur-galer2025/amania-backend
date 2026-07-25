@@ -12,6 +12,8 @@ class CourseLesson extends Model
         'title',
         'type',
         'youtube_url',
+        'video_path',
+        'video_disk',
         'text_content',
         'file_path',
         'file_name',
