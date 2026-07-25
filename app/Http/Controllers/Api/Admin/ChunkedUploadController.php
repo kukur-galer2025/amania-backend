@@ -99,8 +99,8 @@ class ChunkedUploadController extends Controller
         }
         fclose($output);
 
-        // Hapus folder chunks temporary
-        $this->deleteDirectory($chunkDir);
+        // Hapus folder chunks temporary menggunakan Laravel Storage
+        Storage::disk('local')->deleteDirectory("chunks/{$uploadId}");
 
         return response()->json([
             'success'   => true,
@@ -109,19 +109,5 @@ class ChunkedUploadController extends Controller
             'file_size' => filesize($finalFullPath),
             'message'   => 'File berhasil digabungkan!',
         ]);
-    }
-
-    /**
-     * Helper: Hapus directory beserta isinya
-     */
-    private function deleteDirectory(string $dir): void
-    {
-        if (!is_dir($dir)) return;
-        $files = array_diff(scandir($dir), ['.', '..']);
-        foreach ($files as $file) {
-            $path = "{$dir}/{$file}";
-            is_dir($path) ? $this->deleteDirectory($path) : unlink($path);
-        }
-        rmdir($dir);
     }
 }
