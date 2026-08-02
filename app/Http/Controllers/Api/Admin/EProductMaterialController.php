@@ -19,11 +19,11 @@ class EProductMaterialController extends Controller
             'title'        => 'required|string|max:255',
             'type'         => 'required|in:file,link',
             // 🔥 Validasi Maksimal 50MB (51200 KB) 🔥
-            'file'         => 'required_if:type,file|nullable|file|mimes:pdf,zip,rar|max:51200', 
+            'file'         => 'required_if:type,file|nullable|file|mimes:pdf,zip,rar,html,htm|max:51200', 
             'link'         => 'required_if:type,link|nullable|url'
         ], [
             'file.max' => 'Ukuran file terlalu besar! Maksimal 50MB.',
-            'file.mimes' => 'Format file harus berupa PDF, ZIP, atau RAR.',
+            'file.mimes' => 'Format file harus berupa PDF, ZIP, RAR, atau HTML.',
         ]);
 
         $product = \App\Models\EProduct::findOrFail($request->e_product_id);
