@@ -270,11 +270,14 @@ class EProductController extends Controller
 
         // 🔥 Tampilkan file secara inline (di tab baru) KHUSUS untuk HTML dengan pengamanan Sandbox
         if (in_array($ext, ['html', 'htm'])) {
-            return response()->file($filePath, [
+            $resp = response()->file($filePath, [
                 'Content-Type' => 'text/html',
                 'Content-Disposition' => 'inline; filename="' . $fileName . '"',
-                'Content-Security-Policy' => "sandbox allow-scripts"
+                'Content-Security-Policy' => "frame-ancestors *; sandbox allow-scripts allow-same-origin"
             ]);
+            // Hapus header X-Frame-Options bawaan Laravel/Nginx (jika diset dari PHP)
+            $resp->headers->remove('X-Frame-Options');
+            return $resp;
         }
 
         // Untuk file selain HTML, paksa browser melakukan unduhan (attachment)
