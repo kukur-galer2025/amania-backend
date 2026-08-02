@@ -265,9 +265,19 @@ class EProductController extends Controller
             return response()->json(['success' => false, 'message' => 'File tidak ditemukan di server.'], 404);
         }
 
-        $ext = pathinfo($filePath, PATHINFO_EXTENSION);
+        $ext = strtolower(pathinfo($filePath, PATHINFO_EXTENSION));
         $fileName = $material->title . '.' . $ext;
 
+        // 🔥 Tampilkan file secara inline (di tab baru) KHUSUS untuk HTML dengan pengamanan Sandbox
+        if (in_array($ext, ['html', 'htm'])) {
+            return response()->file($filePath, [
+                'Content-Type' => 'text/html',
+                'Content-Disposition' => 'inline; filename="' . $fileName . '"',
+                'Content-Security-Policy' => "sandbox allow-scripts"
+            ]);
+        }
+
+        // Untuk file selain HTML, paksa browser melakukan unduhan (attachment)
         return response()->streamDownload(function () use ($filePath) {
             $stream = fopen($filePath, 'rb');
             while (!feof($stream)) {
