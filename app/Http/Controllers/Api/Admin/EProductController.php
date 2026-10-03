@@ -153,4 +153,81 @@ class EProductController extends Controller
             'message' => 'E-Produk dan materinya berhasil dihapus!'
         ]);
     }
+
+    /**
+     * KIRIM EMAIL BROADCAST KE SEMUA USER (DENGAN PROGRESS BAR + ANTI DUPLIKAT)
+     */
+    public function broadcast(Request $request, $id)
+    {
+        $product = EProduct::findOrFail($id);
+
+        // Cek Otorisasi (Hanya pembuat produk atau superadmin)
+        if ($request->user()->role === 'creator' && $product->user_id !== $request->user()->id) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized'], 403);
+        }
+
+        // 🔒 ANTI DUPLIKAT: Cek apakah broadcast untuk produk ini sedang berjalan
+        $lockKey = "broadcast_eproduct_{$id}_lock";
+        if (\Illuminate\Support\Facades\Cache::has($lockKey)) {
+            return response()->json([
+                'success' => false, 
+                'message' => 'Broadcast untuk produk ini sedang berjalan. Silakan tunggu hingga selesai.'
+            ], 429);
+        }
+
+        // Hitung total konsumen (role user)
+        $totalUsers = \App\Models\User::where('role', 'user')->count();
+        
+        if ($totalUsers === 0) {
+            return response()->json(['success' => false, 'message' => 'Tidak ada konsumen untuk di-broadcast.']);
+        }
+
+        // 🔒 Pasang Lock (expired 1 jam sebagai safety net)
+        \Illuminate\Support\Facades\Cache::put($lockKey, true, now()->addHour());
+
+        // Setup Cache untuk tracking Progress Bar
+        $cacheKeyTotal = "broadcast_eproduct_{$id}_total";
+        $cacheKeyProgress = "broadcast_eproduct_{$id}_progress";
+        
+        \Illuminate\Support\Facades\Cache::put($cacheKeyTotal, $totalUsers, now()->addHours(24));
+        \Illuminate\Support\Facades\Cache::put($cacheKeyProgress, 0, now()->addHours(24));
+
+        // Ambil semua user dengan role 'user' (konsumen) dalam bentuk chunk agar tidak overload memory
+        \App\Models\User::where('role', 'user')->chunk(100, function ($users) use ($product, $id) {
+            foreach ($users as $user) {
+                // Masukkan ke Queue Job dan kirim ID produk untuk tracking
+                \App\Jobs\SendEProductBroadcastJob::dispatch($user, $product, $id);
+            }
+        });
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Broadcast email sedang dikirim di latar belakang ke semua konsumen.',
+            'total_target' => $totalUsers
+        ]);
+    }
+
+    /**
+     * CEK PROGRESS BROADCAST
+     */
+    public function broadcastProgress($id)
+    {
+        $cacheKeyTotal = "broadcast_eproduct_{$id}_total";
+        $cacheKeyProgress = "broadcast_eproduct_{$id}_progress";
+
+        $total = \Illuminate\Support\Facades\Cache::get($cacheKeyTotal, 0);
+        $progress = \Illuminate\Support\Facades\Cache::get($cacheKeyProgress, 0);
+
+        $percentage = $total > 0 ? round(($progress / $total) * 100) : 0;
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'total' => $total,
+                'sent' => $progress,
+                'percentage' => $percentage,
+                'is_completed' => ($total > 0 && $progress >= $total)
+            ]
+        ]);
+    }
 }

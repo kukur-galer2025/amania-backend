@@ -206,6 +206,8 @@ Route::middleware(['auth:sanctum', 'role:superadmin|creator'])->prefix('admin')-
     Route::post('/e-products', [AdminEProduct::class, 'store']);
     Route::post('/e-products/{id}', [AdminEProduct::class, 'update']); 
     Route::delete('/e-products/{id}', [AdminEProduct::class, 'destroy']);
+    Route::post('/e-products/{id}/broadcast', [AdminEProduct::class, 'broadcast']);
+    Route::get('/e-products/{id}/broadcast-progress', [AdminEProduct::class, 'broadcastProgress']);
     Route::post('/e-product-materials', [AdminEProductMaterial::class, 'store']);
     Route::delete('/e-product-materials/{id}', [AdminEProductMaterial::class, 'destroy']);
 
