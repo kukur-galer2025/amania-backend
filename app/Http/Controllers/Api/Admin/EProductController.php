@@ -155,79 +155,91 @@ class EProductController extends Controller
     }
 
     /**
-     * KIRIM EMAIL BROADCAST KE SEMUA USER (DENGAN PROGRESS BAR + ANTI DUPLIKAT)
+     * MENDAPATKAN STATISTIK TRACKING BROADCAST & GENERATE LOG JIKA BELUM ADA
      */
-    public function broadcast(Request $request, $id)
+    public function broadcastStats(Request $request, $id)
     {
         $product = EProduct::findOrFail($id);
 
-        // Cek Otorisasi (Hanya pembuat produk atau superadmin)
         if ($request->user()->role === 'creator' && $product->user_id !== $request->user()->id) {
             return response()->json(['success' => false, 'message' => 'Unauthorized'], 403);
         }
 
-        // 🔒 ANTI DUPLIKAT: Cek apakah broadcast untuk produk ini sedang berjalan
-        $lockKey = "broadcast_eproduct_{$id}_lock";
-        if (\Illuminate\Support\Facades\Cache::has($lockKey)) {
-            return response()->json([
-                'success' => false, 
-                'message' => 'Broadcast untuk produk ini sedang berjalan. Silakan tunggu hingga selesai.'
-            ], 429);
-        }
-
-        // Hitung total konsumen (role user)
         $totalUsers = \App\Models\User::where('role', 'user')->count();
-        
         if ($totalUsers === 0) {
             return response()->json(['success' => false, 'message' => 'Tidak ada konsumen untuk di-broadcast.']);
         }
 
-        // 🔒 Pasang Lock (expired 1 jam sebagai safety net)
-        \Illuminate\Support\Facades\Cache::put($lockKey, true, now()->addHour());
+        // Cek apakah log sudah ada untuk produk ini
+        $logCount = \App\Models\EproductBroadcastLog::where('e_product_id', $id)->count();
 
-        // Setup Cache untuk tracking Progress Bar
-        $cacheKeyTotal = "broadcast_eproduct_{$id}_total";
-        $cacheKeyProgress = "broadcast_eproduct_{$id}_progress";
-        
-        \Illuminate\Support\Facades\Cache::put($cacheKeyTotal, $totalUsers, now()->addHours(24));
-        \Illuminate\Support\Facades\Cache::put($cacheKeyProgress, 0, now()->addHours(24));
+        // Jika belum ada log sama sekali, kita generate log untuk SEMUA user konsumen
+        if ($logCount === 0) {
+            \App\Models\User::where('role', 'user')->chunk(500, function ($users) use ($id) {
+                $logs = [];
+                foreach ($users as $user) {
+                    $logs[] = [
+                        'e_product_id' => $id,
+                        'user_id' => $user->id,
+                        'status' => 'pending',
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ];
+                }
+                \App\Models\EproductBroadcastLog::insert($logs);
+            });
+        }
 
-        // Ambil semua user dengan role 'user' (konsumen) dalam bentuk chunk agar tidak overload memory
-        \App\Models\User::where('role', 'user')->chunk(100, function ($users) use ($product, $id) {
-            foreach ($users as $user) {
-                // Masukkan ke Queue Job dan kirim ID produk untuk tracking
-                \App\Jobs\SendEProductBroadcastJob::dispatch($user, $product, $id);
-            }
-        });
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Broadcast email sedang dikirim di latar belakang ke semua konsumen.',
-            'total_target' => $totalUsers
-        ]);
-    }
-
-    /**
-     * CEK PROGRESS BROADCAST
-     */
-    public function broadcastProgress($id)
-    {
-        $cacheKeyTotal = "broadcast_eproduct_{$id}_total";
-        $cacheKeyProgress = "broadcast_eproduct_{$id}_progress";
-
-        $total = \Illuminate\Support\Facades\Cache::get($cacheKeyTotal, 0);
-        $progress = \Illuminate\Support\Facades\Cache::get($cacheKeyProgress, 0);
-
-        $percentage = $total > 0 ? round(($progress / $total) * 100) : 0;
+        // Hitung statistik
+        $total = \App\Models\EproductBroadcastLog::where('e_product_id', $id)->count();
+        $sent = \App\Models\EproductBroadcastLog::where('e_product_id', $id)->where('status', 'sent')->count();
+        $pending = \App\Models\EproductBroadcastLog::where('e_product_id', $id)->where('status', 'pending')->count();
+        $failed = \App\Models\EproductBroadcastLog::where('e_product_id', $id)->where('status', 'failed')->count();
 
         return response()->json([
             'success' => true,
             'data' => [
                 'total' => $total,
-                'sent' => $progress,
-                'percentage' => $percentage,
-                'is_completed' => ($total > 0 && $progress >= $total)
+                'sent' => $sent,
+                'pending' => $pending,
+                'failed' => $failed,
+                'is_completed' => ($pending === 0 && $failed === 0)
             ]
+        ]);
+    }
+
+    /**
+     * MELANJUTKAN (RESUME) PENGIRIMAN BROADCAST DENGAN LIMIT (BATCHING)
+     */
+    public function broadcastSend(Request $request, $id)
+    {
+        $product = EProduct::findOrFail($id);
+        
+        if ($request->user()->role === 'creator' && $product->user_id !== $request->user()->id) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized'], 403);
+        }
+
+        $limit = $request->input('limit', 100); // Default 100 per request
+        
+        // Ambil log yang masih pending
+        $pendingLogs = \App\Models\EproductBroadcastLog::with('user')
+            ->where('e_product_id', $id)
+            ->where('status', 'pending')
+            ->limit($limit)
+            ->get();
+
+        if ($pendingLogs->isEmpty()) {
+            return response()->json(['success' => false, 'message' => 'Tidak ada email pending untuk dikirim.']);
+        }
+
+        foreach ($pendingLogs as $log) {
+            \App\Jobs\SendEProductBroadcastJob::dispatch($log->user, $product, $log->id);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Berhasil memasukkan ' . $pendingLogs->count() . ' email ke dalam antrean pengiriman.',
+            'batch_count' => $pendingLogs->count()
         ]);
     }
 }

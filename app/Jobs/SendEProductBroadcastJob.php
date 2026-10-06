@@ -18,31 +18,31 @@ class SendEProductBroadcastJob implements ShouldQueue
 
     public $user;
     public $product;
-    public $productId;
+    public $logId;
 
-    public function __construct(User $user, EProduct $product, $productId)
+    public function __construct(User $user, EProduct $product, $logId)
     {
         $this->user = $user;
         $this->product = $product;
-        $this->productId = $productId;
+        $this->logId = $logId;
     }
 
     public function handle(): void
     {
+        $log = \App\Models\EproductBroadcastLog::find($this->logId);
+        if (!$log) return;
+
         try {
             Mail::to($this->user->email)->send(new EProductBroadcastMail($this->product));
+            
+            $log->update([
+                'status' => 'sent',
+                'sent_at' => now(),
+            ]);
         } catch (\Exception $e) {
-            // Abaikan jika error (misal email salah format) agar queue lanjut ke email berikutnya
-        }
-
-        // Increment progress di Cache
-        $cacheKey = "broadcast_eproduct_{$this->productId}_progress";
-        $newProgress = \Illuminate\Support\Facades\Cache::increment($cacheKey);
-
-        // Jika semua email sudah terkirim, lepas Lock agar bisa broadcast lagi nanti
-        $total = \Illuminate\Support\Facades\Cache::get("broadcast_eproduct_{$this->productId}_total", 0);
-        if ($total > 0 && $newProgress >= $total) {
-            \Illuminate\Support\Facades\Cache::forget("broadcast_eproduct_{$this->productId}_lock");
+            $log->update([
+                'status' => 'failed',
+            ]);
         }
     }
 }
