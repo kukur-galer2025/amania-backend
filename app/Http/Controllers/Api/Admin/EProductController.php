@@ -161,8 +161,8 @@ class EProductController extends Controller
     {
         $product = EProduct::findOrFail($id);
 
-        if ($request->user()->role === 'creator' && $product->user_id !== $request->user()->id) {
-            return response()->json(['success' => false, 'message' => 'Unauthorized'], 403);
+        if ($request->user()->role !== 'superadmin') {
+            return response()->json(['success' => false, 'message' => 'Hanya Superadmin yang diizinkan melakukan broadcast.'], 403);
         }
 
         $totalUsers = \App\Models\User::where('role', 'user')->count();
@@ -215,8 +215,8 @@ class EProductController extends Controller
     {
         $product = EProduct::findOrFail($id);
         
-        if ($request->user()->role === 'creator' && $product->user_id !== $request->user()->id) {
-            return response()->json(['success' => false, 'message' => 'Unauthorized'], 403);
+        if ($request->user()->role !== 'superadmin') {
+            return response()->json(['success' => false, 'message' => 'Hanya Superadmin yang diizinkan melakukan broadcast.'], 403);
         }
 
         $limit = $request->input('limit', 100); // Default 100 per request
