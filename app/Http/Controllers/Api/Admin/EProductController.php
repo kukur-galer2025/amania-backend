@@ -190,11 +190,16 @@ class EProductController extends Controller
             });
         }
 
-        // Hitung statistik
+        // Hitung statistik produk ini
         $total = \App\Models\EproductBroadcastLog::where('e_product_id', $id)->count();
         $sent = \App\Models\EproductBroadcastLog::where('e_product_id', $id)->where('status', 'sent')->count();
         $pending = \App\Models\EproductBroadcastLog::where('e_product_id', $id)->where('status', 'pending')->count();
         $failed = \App\Models\EproductBroadcastLog::where('e_product_id', $id)->where('status', 'failed')->count();
+
+        // Hitung total email yang terkirim HARI INI (global, untuk ngecek limit harian Resend)
+        $sentToday = \App\Models\EproductBroadcastLog::where('status', 'sent')
+            ->whereDate('updated_at', \Carbon\Carbon::today())
+            ->count();
 
         return response()->json([
             'success' => true,
@@ -203,7 +208,9 @@ class EProductController extends Controller
                 'sent' => $sent,
                 'pending' => $pending,
                 'failed' => $failed,
-                'is_completed' => ($pending === 0 && $failed === 0)
+                'is_completed' => ($pending === 0 && $failed === 0),
+                'sent_today' => $sentToday,
+                'daily_limit' => 100 // Hardcoded limit resend gratis
             ]
         ]);
     }
@@ -221,15 +228,30 @@ class EProductController extends Controller
 
         $limit = $request->input('limit', 100); // Default 100 per request
         
+        // Cek Kuota Harian
+        $sentToday = \App\Models\EproductBroadcastLog::where('status', 'sent')
+            ->whereDate('updated_at', \Carbon\Carbon::today())
+            ->count();
+        
+        $dailyLimit = 100;
+        $remainingQuota = $dailyLimit - $sentToday;
+
+        if ($remainingQuota <= 0) {
+            return response()->json(['success' => false, 'message' => 'Kuota harian Resend Anda (100/hari) sudah habis hari ini. Silakan coba lagi besok.']);
+        }
+
+        // Pastikan limit tidak melebihi sisa kuota hari ini
+        $actualLimit = min($limit, $remainingQuota);
+
         // Ambil log yang masih pending
         $pendingLogs = \App\Models\EproductBroadcastLog::with('user')
             ->where('e_product_id', $id)
             ->where('status', 'pending')
-            ->limit($limit)
+            ->limit($actualLimit)
             ->get();
 
         if ($pendingLogs->isEmpty()) {
-            return response()->json(['success' => false, 'message' => 'Tidak ada email pending untuk dikirim.']);
+            return response()->json(['success' => false, 'message' => 'Tidak ada email pending untuk dikirim (atau sisa kuota tidak cukup).']);
         }
 
         foreach ($pendingLogs as $log) {
@@ -238,7 +260,7 @@ class EProductController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Berhasil memasukkan ' . $pendingLogs->count() . ' email ke dalam antrean pengiriman.',
+            'message' => 'Berhasil memasukkan ' . $pendingLogs->count() . ' email ke dalam antrean pengiriman. (Sisa Kuota Hari Ini: ' . ($remainingQuota - $pendingLogs->count()) . ')',
             'batch_count' => $pendingLogs->count()
         ]);
     }
