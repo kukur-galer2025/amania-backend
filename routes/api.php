@@ -208,6 +208,7 @@ Route::middleware(['auth:sanctum', 'role:superadmin|creator'])->prefix('admin')-
     Route::delete('/e-products/{id}', [AdminEProduct::class, 'destroy']);
     Route::get('/e-products/{id}/broadcast-stats', [AdminEProduct::class, 'broadcastStats']);
     Route::post('/e-products/{id}/broadcast-send', [AdminEProduct::class, 'broadcastSend']);
+    Route::get('/e-products/{id}/broadcast-recipients', [AdminEProduct::class, 'broadcastRecipients']);
     Route::post('/e-product-materials', [AdminEProductMaterial::class, 'store']);
     Route::delete('/e-product-materials/{id}', [AdminEProductMaterial::class, 'destroy']);
 

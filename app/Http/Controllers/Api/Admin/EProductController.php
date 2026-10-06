@@ -242,4 +242,41 @@ class EProductController extends Controller
             'batch_count' => $pendingLogs->count()
         ]);
     }
+
+    /**
+     * DAFTAR PENERIMA BROADCAST BESERTA STATUS
+     */
+    public function broadcastRecipients(Request $request, $id)
+    {
+        $product = EProduct::findOrFail($id);
+
+        if ($request->user()->role !== 'superadmin') {
+            return response()->json(['success' => false, 'message' => 'Unauthorized'], 403);
+        }
+
+        $query = \App\Models\EproductBroadcastLog::with('user:id,name,email')
+            ->where('e_product_id', $id);
+
+        // Filter by status (optional)
+        if ($request->has('status') && in_array($request->status, ['pending', 'sent', 'failed'])) {
+            $query->where('status', $request->status);
+        }
+
+        // Search by name or email
+        if ($request->has('search') && $request->search) {
+            $search = $request->search;
+            $query->whereHas('user', function ($q) use ($search) {
+                $q->where('name', 'like', "%{$search}%")
+                  ->orWhere('email', 'like', "%{$search}%");
+            });
+        }
+
+        $logs = $query->orderByRaw("FIELD(status, 'sent', 'failed', 'pending')")
+            ->paginate(20);
+
+        return response()->json([
+            'success' => true,
+            'data' => $logs
+        ]);
+    }
 }
