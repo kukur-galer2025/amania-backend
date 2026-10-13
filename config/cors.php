@@ -18,10 +18,15 @@ return [
 
     'allowed_methods' => ['*'],
 
-    // 2. MENGGUNAKAN '*' AGAR AMAN DI LOKAL MAUPUN HOSTING
-    'allowed_origins' => ['*'],
+    // 2. MENGGUNAKAN pattern lokal & wildcard yang support credentials
+    'allowed_origins' => [
+        'http://localhost:3000',
+        'http://127.0.0.1:3000',
+        'http://localhost:5173',
+        'http://127.0.0.1:5173',
+    ],
 
-    'allowed_origins_patterns' => [],
+    'allowed_origins_patterns' => ['#^https?://(localhost|127\.0\.0\.1)(:\d+)?$#'],
 
     'allowed_headers' => ['*'],
 

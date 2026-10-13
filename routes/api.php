@@ -90,6 +90,11 @@ Route::get('/course-categories', [AdminCourseCategory::class, 'index']);
 // 🔥 AI COURSE ADVISOR 🔥
 Route::post('/ai/course-advisor', [CourseController::class, 'askCourseAdvisor']);
 
+// 🤖 AI EVENT ASSISTANT (Hybrid RAG + Transactional Data) 🤖
+// Bisa diakses tanpa login (public) tapi fitur cek tiket user hanya aktif jika auth tersedia
+Route::post('/ai/event-assistant', [\App\Http\Controllers\Api\EventAssistantController::class, 'chat']);
+
+
 // Download file lesson & certificate — diluar auth:sanctum karena browser <a target="_blank"> tidak kirim Authorization header
 // Auth ditangani di controller via ?token= query parameter
 Route::get('/courses/lessons/{lessonId}/download', [CourseController::class, 'downloadLessonFile']);

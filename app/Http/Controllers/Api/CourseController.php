@@ -753,7 +753,8 @@ class CourseController extends Controller
             'contents' => $contents
         ];
 
-        $url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:streamGenerateContent?alt=sse&key=' . $geminiApiKey;
+        $model = config('services.gemini.model') ?? env('GEMINI_MODEL', 'gemini-1.5-flash');
+        $url = 'https://generativelanguage.googleapis.com/v1beta/models/' . $model . ':streamGenerateContent?alt=sse&key=' . $geminiApiKey;
 
         return response()->stream(function () use ($url, $payload) {
             // Bypass reverse proxy buffering (Nginx, Cloudflare)

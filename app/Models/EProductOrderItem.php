@@ -21,4 +21,9 @@ class EProductOrderItem extends Model
     {
         return $this->belongsTo(EProduct::class, 'e_product_id');
     }
+
+    public function eProduct(): BelongsTo
+    {
+        return $this->belongsTo(EProduct::class, 'e_product_id');
+    }
 }
