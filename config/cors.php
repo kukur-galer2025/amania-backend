@@ -20,13 +20,18 @@ return [
 
     // 2. MENGGUNAKAN pattern lokal & wildcard yang support credentials
     'allowed_origins' => [
+        'https://amania.id',
+        'https://www.amania.id',
         'http://localhost:3000',
         'http://127.0.0.1:3000',
         'http://localhost:5173',
         'http://127.0.0.1:5173',
     ],
 
-    'allowed_origins_patterns' => ['#^https?://(localhost|127\.0\.0\.1)(:\d+)?$#'],
+    'allowed_origins_patterns' => [
+        '#^https?://(localhost|127\.0\.0\.1)(:\d+)?$#',
+        '#^https?://([a-zA-Z0-9-]+\.)?amania\.id$#',
+    ],
 
     'allowed_headers' => ['*'],
 
