@@ -80,7 +80,7 @@ class EventAssistantController extends Controller
 
         // 4. Periksa Ketersediaan Google Gemini API
         $geminiApiKey = config('services.gemini.api_key') ?? env('GEMINI_API_KEY');
-        $model = config('services.gemini.model') ?? env('GEMINI_MODEL', 'gemini-1.5-flash');
+        $model = config('services.gemini.model') ?? env('GEMINI_MODEL', 'gemini-2.5-flash');
 
         if ($geminiApiKey) {
             $systemPrompt = $this->buildSystemPrompt($ragContext, $transactionalContext, $user, $queriedData);
@@ -118,10 +118,14 @@ class EventAssistantController extends Controller
             curl_setopt($testCh, CURLOPT_POSTFIELDS, json_encode($payload));
             curl_setopt($testCh, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
             curl_setopt($testCh, CURLOPT_RETURNTRANSFER, true);
-            curl_setopt($testCh, CURLOPT_TIMEOUT, 8);
+            curl_setopt($testCh, CURLOPT_TIMEOUT, 30);
             $testResponse = curl_exec($testCh);
             $httpCode = curl_getinfo($testCh, CURLINFO_HTTP_CODE);
+            $curlErr = curl_error($testCh);
             curl_close($testCh);
+            if ($httpCode !== 200) {
+                \Illuminate\Support\Facades\Log::warning("Gemini API returned HTTP $httpCode (Error: $curlErr). Response: " . substr($testResponse, 0, 500));
+            }
 
             if ($httpCode === 200 && $testResponse) {
                 return response()->stream(function () use ($testResponse) {
