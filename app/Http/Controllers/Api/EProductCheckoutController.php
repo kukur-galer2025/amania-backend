@@ -282,6 +282,7 @@ class EProductCheckoutController extends Controller
             $discountAmount = $voucher->calculateDiscount($totalAmount);
             $totalAmount    = max(0, $totalAmount - $discountAmount);
             $voucherCode    = $voucher->code;
+            $voucher->increment('used_count');
         }
 
         DB::beginTransaction();

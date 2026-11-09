@@ -73,7 +73,10 @@ class RegistrationController extends Controller
 
         if ($request->filled('voucher_code') && $priceToPay > 0) {
             $voucherInput = strtoupper(trim($request->voucher_code));
-            $voucher = Voucher::where('code', $voucherInput)->first();
+            $cleanInput   = str_replace(' ', '', $voucherInput);
+            $voucher      = Voucher::where('code', $voucherInput)
+                ->orWhereRaw("REPLACE(code, ' ', '') = ?", [$cleanInput])
+                ->first();
 
             if (!$voucher || !$voucher->isValid()) {
                 return response()->json(['success' => false, 'message' => 'Kode voucher tidak valid atau sudah tidak berlaku.'], 422);

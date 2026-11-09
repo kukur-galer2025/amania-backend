@@ -79,6 +79,7 @@ Route::get('/leaderboard', [LeaderboardController::class, 'index']);
 Route::get('/advertisements', [AdvertisementController::class, 'index']);
 Route::get('/global-search', [GlobalSearchController::class, 'search']);
 Route::get('/vouchers/available', [VoucherController::class, 'available']);
+Route::post('/vouchers/validate', [VoucherController::class, 'validate']);
 
 Route::get('/e-products', [EProductController::class, 'index']);
 Route::get('/e-products/{slug}', [EProductController::class, 'show']);
@@ -160,8 +161,6 @@ Route::middleware('auth:sanctum')->group(function () {
     // 🔥 KURSUS ONLINE (MEMBER) 🔥
     Route::post('/checkout/course', [EProductCheckoutController::class, 'purchaseCourse']);
 
-    // 🎟️ VOUCHER - Validasi kode voucher saat checkout
-    Route::post('/vouchers/validate', [VoucherController::class, 'validate']);
     Route::get('/my-courses', [CourseController::class, 'myCourses']);
     Route::get('/my-course-transactions', [CourseController::class, 'myTransactions']);
     Route::post('/course-transactions/{id}/reupload', [EProductCheckoutController::class, 'reuploadPaymentProofCourse']);

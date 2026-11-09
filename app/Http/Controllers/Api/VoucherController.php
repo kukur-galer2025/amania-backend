@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Voucher;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Validator;
 
 class VoucherController extends Controller
 {
@@ -13,7 +14,7 @@ class VoucherController extends Controller
      */
     public function available(Request $request)
     {
-        $type = $request->query('type'); // 'e_product' | 'course' | null
+        $type = $request->query('type'); // 'e_product' | 'course' | 'event' | null
 
         $query = Voucher::where('is_active', true)
             ->where(function ($q) {
@@ -27,7 +28,10 @@ class VoucherController extends Controller
             });
 
         if ($type && in_array($type, ['e_product', 'course', 'event'])) {
-            $query->whereIn('applicable_to', ['all', $type]);
+            $query->where(function ($q) use ($type) {
+                $q->whereIn('applicable_to', ['all', $type])
+                  ->orWhereNull('applicable_to');
+            });
         }
 
         $vouchers = $query->orderBy('discount_value', 'desc')
@@ -49,24 +53,27 @@ class VoucherController extends Controller
      * Request:
      *   - code   : string (required)
      *   - amount : integer (required) — harga asli sebelum diskon
-     *   - type   : string (required) — 'e_product' atau 'course'
-     *
-     * Response:
-     *   {
-     *     success: true,
-     *     data: {
-     *       code, name, discount_type, discount_value,
-     *       discount_amount, final_price
-     *     }
-     *   }
+     *   - type   : string (required) — 'e_product', 'course', atau 'event'
      */
     public function validate(Request $request)
     {
-        $request->validate([
+        $validator = Validator::make($request->all(), [
             'code'   => 'required|string',
             'amount' => 'required|numeric|min:0',
             'type'   => 'required|in:e_product,course,event',
+        ], [
+            'code.required'   => 'Silakan masukkan kode voucher.',
+            'amount.required' => 'Nominal pembelian tidak valid.',
+            'type.required'   => 'Tipe produk tidak valid.',
+            'type.in'         => 'Tipe produk harus salah satu dari: e_product, course, event.',
         ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => $validator->errors()->first(),
+            ], 200);
+        }
 
         $code   = strtoupper(trim($request->code));
         $amount = (int) round($request->amount);
@@ -80,19 +87,20 @@ class VoucherController extends Controller
         if (!$voucher) {
             return response()->json([
                 'success' => false,
-                'message' => 'Kode voucher tidak ditemukan.',
-            ], 404);
+                'message' => "Kode voucher '{$code}' tidak ditemukan.",
+            ], 200);
         }
 
         if (!$voucher->is_active) {
             return response()->json([
                 'success' => false,
-                'message' => "Voucher '{$voucher->code}' sedang dinonaktifkan.",
-            ], 422);
+                'message' => "Voucher '{$voucher->code}' sedang tidak aktif.",
+            ], 200);
         }
 
         if ($voucher->expires_at !== null) {
             $expiry = $voucher->expires_at->copy();
+            // Jika jam 00:00:00 atau tanggalnya hari ini, beri toleransi hingga akhir hari ini (23:59:59)
             if ($expiry->format('H:i:s') === '00:00:00' || $expiry->isToday()) {
                 $expiry = $expiry->endOfDay();
             }
@@ -100,38 +108,38 @@ class VoucherController extends Controller
                 return response()->json([
                     'success' => false,
                     'message' => "Voucher '{$voucher->code}' sudah kedaluwarsa pada " . $voucher->expires_at->format('d M Y') . ".",
-                ], 422);
+                ], 200);
             }
         }
 
         if ($voucher->max_uses !== null && $voucher->used_count >= $voucher->max_uses) {
             return response()->json([
                 'success' => false,
-                'message' => "Batas pemakaian voucher '{$voucher->code}' sudah habis ({$voucher->used_count}/{$voucher->max_uses}).",
-            ], 422);
+                'message' => "Kuota pemakaian voucher '{$voucher->code}' sudah habis ({$voucher->used_count}/{$voucher->max_uses}).",
+            ], 200);
         }
 
         // Cek applicable_to
-        if ($voucher->applicable_to !== 'all' && $voucher->applicable_to !== $type) {
+        if ($voucher->applicable_to && $voucher->applicable_to !== 'all' && $voucher->applicable_to !== $type) {
             $typeNames = [
                 'e_product' => 'E-Product',
-                'course'    => 'Kursus',
+                'course'    => 'Kursus Online',
                 'event'     => 'Event / Program',
             ];
             $applicableName = $typeNames[$voucher->applicable_to] ?? $voucher->applicable_to;
             $currentName    = $typeNames[$type] ?? $type;
             return response()->json([
                 'success' => false,
-                'message' => "Voucher ini hanya berlaku untuk {$applicableName}, bukan {$currentName}.",
-            ], 422);
+                'message' => "Voucher ini khusus untuk {$applicableName}, tidak dapat digunakan pada {$currentName}.",
+            ], 200);
         }
 
         // Cek minimum pembelian
         if ($amount < $voucher->min_purchase) {
             return response()->json([
                 'success' => false,
-                'message' => "Syarat minimum pembelian voucher ini adalah Rp " . number_format($voucher->min_purchase, 0, ',', '.') . " (harga saat ini: Rp " . number_format($amount, 0, ',', '.') . ").",
-            ], 422);
+                'message' => "Syarat minimum belanja voucher ini adalah Rp " . number_format($voucher->min_purchase, 0, ',', '.') . " (total saat ini: Rp " . number_format($amount, 0, ',', '.') . ").",
+            ], 200);
         }
 
         $discountAmount = $voucher->calculateDiscount($amount);
@@ -139,7 +147,7 @@ class VoucherController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Voucher valid!',
+            'message' => "Voucher '{$voucher->code}' berhasil diterapkan!",
             'data'    => [
                 'code'            => $voucher->code,
                 'name'            => $voucher->name,
@@ -148,6 +156,6 @@ class VoucherController extends Controller
                 'discount_amount' => $discountAmount,
                 'final_price'     => $finalPrice,
             ],
-        ]);
+        ], 200);
     }
 }
