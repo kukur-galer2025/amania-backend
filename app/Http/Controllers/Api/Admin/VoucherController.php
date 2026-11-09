@@ -33,8 +33,8 @@ class VoucherController extends Controller
             'discount_value' => 'required|integer|min:1',
             'min_purchase'   => 'nullable|integer|min:0',
             'max_uses'       => 'nullable|integer|min:1',
-            'applicable_to'  => 'nullable|in:all,e_product,course',
-            'expires_at'     => 'nullable|date|after:now',
+            'applicable_to'  => 'nullable|in:all,e_product,course,event',
+            'expires_at'     => 'nullable|date',
             'is_active'      => 'nullable|boolean',
         ]);
 
@@ -46,6 +46,15 @@ class VoucherController extends Controller
             ], 422);
         }
 
+        $expiresAt = null;
+        if ($request->filled('expires_at')) {
+            $parsed = \Carbon\Carbon::parse($request->expires_at);
+            if ($parsed->format('H:i:s') === '00:00:00') {
+                $parsed = $parsed->endOfDay();
+            }
+            $expiresAt = $parsed;
+        }
+
         $voucher = Voucher::create([
             'code'           => strtoupper($request->code),
             'name'           => $request->name,
@@ -54,7 +63,7 @@ class VoucherController extends Controller
             'min_purchase'   => $request->min_purchase ?? 0,
             'max_uses'       => $request->max_uses,
             'applicable_to'  => $request->applicable_to ?? 'all',
-            'expires_at'     => $request->expires_at,
+            'expires_at'     => $expiresAt,
             'is_active'      => $request->boolean('is_active', true),
         ]);
 
@@ -79,7 +88,7 @@ class VoucherController extends Controller
             'discount_value' => 'sometimes|required|integer|min:1',
             'min_purchase'   => 'nullable|integer|min:0',
             'max_uses'       => 'nullable|integer|min:1',
-            'applicable_to'  => 'nullable|in:all,e_product,course',
+            'applicable_to'  => 'nullable|in:all,e_product,course,event',
             'expires_at'     => 'nullable|date',
             'is_active'      => 'nullable|boolean',
         ]);
@@ -97,8 +106,16 @@ class VoucherController extends Controller
         $data = $request->only([
             'name', 'discount_type', 'discount_value',
             'min_purchase', 'max_uses', 'applicable_to',
-            'expires_at', 'is_active',
+            'is_active',
         ]);
+
+        if ($request->filled('expires_at')) {
+            $parsed = \Carbon\Carbon::parse($request->expires_at);
+            if ($parsed->format('H:i:s') === '00:00:00') {
+                $parsed = $parsed->endOfDay();
+            }
+            $data['expires_at'] = $parsed;
+        }
 
         if ($request->has('code')) {
             $data['code'] = strtoupper($request->code);

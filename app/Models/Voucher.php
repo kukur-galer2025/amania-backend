@@ -34,8 +34,15 @@ class Voucher extends Model
             return false;
         }
 
-        if ($this->expires_at !== null && $this->expires_at->isPast()) {
-            return false;
+        if ($this->expires_at !== null) {
+            // Jika jam 00:00:00 (user hanya pilih tanggal di picker), anggap berlaku sampai akhir hari
+            $expiry = $this->expires_at->format('H:i:s') === '00:00:00'
+                ? $this->expires_at->copy()->endOfDay()
+                : $this->expires_at;
+
+            if ($expiry->isPast()) {
+                return false;
+            }
         }
 
         if ($this->max_uses !== null && $this->used_count >= $this->max_uses) {

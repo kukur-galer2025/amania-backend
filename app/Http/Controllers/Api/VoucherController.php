@@ -18,14 +18,15 @@ class VoucherController extends Controller
         $query = Voucher::where('is_active', true)
             ->where(function ($q) {
                 $q->whereNull('expires_at')
-                  ->orWhere('expires_at', '>', now());
+                  ->orWhere('expires_at', '>=', now())
+                  ->orWhereDate('expires_at', '>=', now()->toDateString());
             })
             ->where(function ($q) {
                 $q->whereNull('max_uses')
                   ->orWhereRaw('used_count < max_uses');
             });
 
-        if ($type && in_array($type, ['e_product', 'course'])) {
+        if ($type && in_array($type, ['e_product', 'course', 'event'])) {
             $query->whereIn('applicable_to', ['all', $type]);
         }
 
@@ -64,14 +65,17 @@ class VoucherController extends Controller
         $request->validate([
             'code'   => 'required|string',
             'amount' => 'required|integer|min:0',
-            'type'   => 'required|in:e_product,course',
+            'type'   => 'required|in:e_product,course,event',
         ]);
 
         $code   = strtoupper(trim($request->code));
         $amount = (int) $request->amount;
         $type   = $request->type;
 
-        $voucher = Voucher::where('code', $code)->first();
+        $cleanCode = str_replace(' ', '', $code);
+        $voucher = Voucher::where('code', $code)
+            ->orWhereRaw("REPLACE(code, ' ', '') = ?", [$cleanCode])
+            ->first();
 
         if (!$voucher) {
             return response()->json([
@@ -89,10 +93,16 @@ class VoucherController extends Controller
 
         // Cek applicable_to
         if ($voucher->applicable_to !== 'all' && $voucher->applicable_to !== $type) {
-            $typeName = $type === 'e_product' ? 'E-Product' : 'Kursus';
+            $typeNames = [
+                'e_product' => 'E-Product',
+                'course'    => 'Kursus',
+                'event'     => 'Event / Program',
+            ];
+            $applicableName = $typeNames[$voucher->applicable_to] ?? $voucher->applicable_to;
+            $currentName    = $typeNames[$type] ?? $type;
             return response()->json([
                 'success' => false,
-                'message' => "Voucher ini hanya berlaku untuk " . ($voucher->applicable_to === 'e_product' ? 'E-Product' : 'Kursus') . ", bukan {$typeName}.",
+                'message' => "Voucher ini hanya berlaku untuk {$applicableName}, bukan {$currentName}.",
             ], 422);
         }
 

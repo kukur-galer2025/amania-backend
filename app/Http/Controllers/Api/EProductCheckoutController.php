@@ -117,7 +117,10 @@ class EProductCheckoutController extends Controller
 
         if ($request->filled('voucher_code')) {
             $voucherInput = strtoupper(trim($request->voucher_code));
-            $voucher = Voucher::where('code', $voucherInput)->first();
+            $cleanInput   = str_replace(' ', '', $voucherInput);
+            $voucher      = Voucher::where('code', $voucherInput)
+                ->orWhereRaw("REPLACE(code, ' ', '') = ?", [$cleanInput])
+                ->first();
 
             if (!$voucher || !$voucher->isValid()) {
                 return response()->json(['success' => false, 'message' => 'Kode voucher tidak valid atau sudah tidak berlaku.'], 422);
@@ -134,6 +137,7 @@ class EProductCheckoutController extends Controller
             $discountAmount = $voucher->calculateDiscount($totalAmount);
             $totalAmount    = max(0, $totalAmount - $discountAmount);
             $voucherCode    = $voucher->code;
+            $voucher->increment('used_count');
         }
 
         $merchantRef = 'INV-EP-' . strtoupper(Str::random(8)) . '-' . $user->id;
@@ -165,10 +169,6 @@ class EProductCheckoutController extends Controller
 
                 if (!$isDirectBuy) {
                     Cart::where('user_id', $user->id)->delete();
-                }
-
-                if (isset($voucher) && $voucher) {
-                    $voucher->increment('used_count');
                 }
 
                 DB::commit();
@@ -208,10 +208,6 @@ class EProductCheckoutController extends Controller
 
             if (!$isDirectBuy) {
                 Cart::where('user_id', $user->id)->delete();
-            }
-
-            if (isset($voucher) && $voucher) {
-                $voucher->increment('used_count');
             }
             
             DB::commit();
@@ -266,7 +262,10 @@ class EProductCheckoutController extends Controller
 
         if ($request->filled('voucher_code')) {
             $voucherInput = strtoupper(trim($request->voucher_code));
-            $voucher = Voucher::where('code', $voucherInput)->first();
+            $cleanInput   = str_replace(' ', '', $voucherInput);
+            $voucher      = Voucher::where('code', $voucherInput)
+                ->orWhereRaw("REPLACE(code, ' ', '') = ?", [$cleanInput])
+                ->first();
 
             if (!$voucher || !$voucher->isValid()) {
                 return response()->json(['success' => false, 'message' => 'Kode voucher tidak valid atau sudah tidak berlaku.'], 422);
@@ -300,10 +299,6 @@ class EProductCheckoutController extends Controller
                     'status'          => 'PAID',
                 ]);
 
-                if (isset($voucher) && $voucher) {
-                    $voucher->increment('used_count');
-                }
-
                 DB::commit();
                 return response()->json([
                     'success' => true,
@@ -333,10 +328,6 @@ class EProductCheckoutController extends Controller
                 'payment_proof'    => $paymentPath,
                 'status'           => 'PAID', // 🔥 AUTO-APPROVE: Langsung PAID, Admin cek mutasi belakangan
             ]);
-
-            if (isset($voucher) && $voucher) {
-                $voucher->increment('used_count');
-            }
 
             DB::commit();
             return response()->json([

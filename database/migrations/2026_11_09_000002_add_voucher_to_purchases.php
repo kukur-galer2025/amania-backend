@@ -17,6 +17,11 @@ return new class extends Migration
             $table->string('voucher_code')->nullable()->after('amount');
             $table->integer('discount_amount')->default(0)->after('voucher_code');
         });
+
+        Schema::table('registrations', function (Blueprint $table) {
+            $table->string('voucher_code')->nullable()->after('total_amount');
+            $table->integer('discount_amount')->default(0)->after('voucher_code');
+        });
     }
 
     public function down(): void
@@ -26,6 +31,10 @@ return new class extends Migration
         });
 
         Schema::table('course_enrollments', function (Blueprint $table) {
+            $table->dropColumn(['voucher_code', 'discount_amount']);
+        });
+
+        Schema::table('registrations', function (Blueprint $table) {
             $table->dropColumn(['voucher_code', 'discount_amount']);
         });
     }

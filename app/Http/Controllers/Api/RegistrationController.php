@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\Notification;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use App\Helpers\ImageHelper;
+use App\Models\Voucher;
 
 class RegistrationController extends Controller
 {
@@ -38,7 +39,8 @@ class RegistrationController extends Controller
         $request->validate([
             'event_id'      => 'required|exists:events,id',
             'tier'          => 'required|in:free,premium',
-            'payment_proof' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:5120'
+            'payment_proof' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:5120',
+            'voucher_code'  => 'nullable|string'
         ]);
 
         $event = Event::findOrFail($request->event_id);
@@ -64,6 +66,32 @@ class RegistrationController extends Controller
         }
 
         $priceToPay = $request->tier === 'premium' ? ($event->premium_price ?? $event->basic_price) : $event->basic_price;
+        $priceToPay = (int) $priceToPay;
+
+        $voucherCode    = null;
+        $discountAmount = 0;
+
+        if ($request->filled('voucher_code') && $priceToPay > 0) {
+            $voucherInput = strtoupper(trim($request->voucher_code));
+            $voucher = Voucher::where('code', $voucherInput)->first();
+
+            if (!$voucher || !$voucher->isValid()) {
+                return response()->json(['success' => false, 'message' => 'Kode voucher tidak valid atau sudah tidak berlaku.'], 422);
+            }
+
+            if ($voucher->applicable_to !== 'all' && $voucher->applicable_to !== 'event') {
+                return response()->json(['success' => false, 'message' => 'Voucher ini tidak berlaku untuk Event / Program.'], 422);
+            }
+
+            if ($priceToPay < $voucher->min_purchase) {
+                return response()->json(['success' => false, 'message' => 'Total pembelian tidak memenuhi minimum penggunaan voucher.'], 422);
+            }
+
+            $discountAmount = $voucher->calculateDiscount($priceToPay);
+            $priceToPay     = max(0, $priceToPay - $discountAmount);
+            $voucherCode    = $voucher->code;
+            $voucher->increment('used_count');
+        }
         
         // 🔥 LOGIKA PERBAIKAN: Default status jika Rp 0
         $status = 'verified'; 
@@ -88,15 +116,17 @@ class RegistrationController extends Controller
         $ticketCode = "AM-". date('Y') . "-{$eventPrefix}-" . strtoupper(Str::random(5)); // AM untuk Amania
 
         $registration = Registration::create([
-            'ticket_code'   => $ticketCode,
-            'user_id'       => $user->id,
-            'event_id'      => $event->id,
-            'name'          => $user->name,
-            'email'         => $user->email,
-            'payment_proof' => $paymentPath,
-            'status'        => $status, // Akan masuk 'verified' otomatis jika Rp 0
-            'tier'          => $request->tier,
-            'total_amount'  => $priceToPay
+            'ticket_code'     => $ticketCode,
+            'user_id'         => $user->id,
+            'event_id'        => $event->id,
+            'name'            => $user->name,
+            'email'           => $user->email,
+            'payment_proof'   => $paymentPath,
+            'status'          => $status, // Akan masuk 'verified' otomatis jika Rp 0
+            'tier'            => $request->tier,
+            'total_amount'    => $priceToPay,
+            'voucher_code'    => $voucherCode,
+            'discount_amount' => $discountAmount,
         ]);
 
         // 🔥 TRIGGER NOTIFIKASI KE ADMIN 🔥

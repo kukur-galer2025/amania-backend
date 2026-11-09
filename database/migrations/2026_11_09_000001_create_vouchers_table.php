@@ -18,7 +18,7 @@ return new class extends Migration
             $table->integer('used_count')->default(0);
             $table->integer('min_purchase')->default(0);
             $table->boolean('is_active')->default(true);
-            $table->enum('applicable_to', ['all', 'e_product', 'course'])->default('all');
+            $table->enum('applicable_to', ['all', 'e_product', 'course', 'event'])->default('all');
             $table->timestamp('expires_at')->nullable();
             $table->timestamps();
         });

@@ -16,7 +16,9 @@ class Registration extends Model
         'status', 
         'rejection_reason', // Ditambahkan agar bisa di-update oleh Controller
         'tier', 
-        'total_amount'
+        'total_amount',
+        'voucher_code',
+        'discount_amount'
     ];
 
     public function user() { return $this->belongsTo(User::class); }
