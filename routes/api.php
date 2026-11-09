@@ -49,6 +49,8 @@ use App\Http\Controllers\Api\Admin\CourseController as AdminCourse;
 use App\Http\Controllers\Api\Admin\CourseTransactionController as AdminCourseTransaction;
 use App\Http\Controllers\Api\Admin\CourseSectionController as AdminCourseSection;
 use App\Http\Controllers\Api\Admin\CourseLessonController as AdminCourseLesson;
+use App\Http\Controllers\Api\VoucherController;
+use App\Http\Controllers\Api\Admin\VoucherController as AdminVoucherController;
 
 /*
 |--------------------------------------------------------------------------
@@ -156,6 +158,9 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // 🔥 KURSUS ONLINE (MEMBER) 🔥
     Route::post('/checkout/course', [EProductCheckoutController::class, 'purchaseCourse']);
+
+    // 🎟️ VOUCHER - Validasi kode voucher saat checkout
+    Route::post('/vouchers/validate', [VoucherController::class, 'validate']);
     Route::get('/my-courses', [CourseController::class, 'myCourses']);
     Route::get('/my-course-transactions', [CourseController::class, 'myTransactions']);
     Route::post('/course-transactions/{id}/reupload', [EProductCheckoutController::class, 'reuploadPaymentProofCourse']);
@@ -340,4 +345,11 @@ Route::middleware(['auth:sanctum', 'role:superadmin'])->prefix('admin')->group(f
     Route::post('/course-categories', [AdminCourseCategory::class, 'store']);
     Route::put('/course-categories/{id}', [AdminCourseCategory::class, 'update']);
     Route::delete('/course-categories/{id}', [AdminCourseCategory::class, 'destroy']);
+
+    // 🎟️ VOUCHER (Superadmin Only)
+    Route::get('/vouchers', [AdminVoucherController::class, 'index']);
+    Route::post('/vouchers', [AdminVoucherController::class, 'store']);
+    Route::put('/vouchers/{id}', [AdminVoucherController::class, 'update']);
+    Route::delete('/vouchers/{id}', [AdminVoucherController::class, 'destroy']);
+    Route::patch('/vouchers/{id}/toggle', [AdminVoucherController::class, 'toggleActive']);
 });

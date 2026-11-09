@@ -13,6 +13,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use App\Helpers\ImageHelper;
+use App\Models\Voucher;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
@@ -37,7 +38,8 @@ class EProductCheckoutController extends Controller
     {
         $request->validate([
             'method'       => 'required|string', 
-            'e_product_id' => 'nullable|exists:e_products,id' 
+            'e_product_id' => 'nullable|exists:e_products,id',
+            'voucher_code' => 'nullable|string',
         ]);
 
         $user = $request->user();
@@ -107,6 +109,33 @@ class EProductCheckoutController extends Controller
             }
         }
 
+        // ==========================================
+        // APLIKASI VOUCHER (JIKA ADA)
+        // ==========================================
+        $voucherCode    = null;
+        $discountAmount = 0;
+
+        if ($request->filled('voucher_code')) {
+            $voucherInput = strtoupper(trim($request->voucher_code));
+            $voucher = Voucher::where('code', $voucherInput)->first();
+
+            if (!$voucher || !$voucher->isValid()) {
+                return response()->json(['success' => false, 'message' => 'Kode voucher tidak valid atau sudah tidak berlaku.'], 422);
+            }
+
+            if ($voucher->applicable_to !== 'all' && $voucher->applicable_to !== 'e_product') {
+                return response()->json(['success' => false, 'message' => 'Voucher ini tidak berlaku untuk E-Product.'], 422);
+            }
+
+            if ($totalAmount < $voucher->min_purchase) {
+                return response()->json(['success' => false, 'message' => 'Total pembelian tidak memenuhi minimum penggunaan voucher.'], 422);
+            }
+
+            $discountAmount = $voucher->calculateDiscount($totalAmount);
+            $totalAmount    = max(0, $totalAmount - $discountAmount);
+            $voucherCode    = $voucher->code;
+        }
+
         $merchantRef = 'INV-EP-' . strtoupper(Str::random(8)) . '-' . $user->id;
 
         DB::beginTransaction();
@@ -120,6 +149,8 @@ class EProductCheckoutController extends Controller
                     'user_id'        => $user->id,
                     // 'e_product_id' => ... 🔥 BARIS INI SUDAH DIHAPUS PERMANEN
                     'amount'         => 0,
+                    'voucher_code'   => $voucherCode,
+                    'discount_amount'=> $discountAmount,
                     'payment_method' => 'FREE_CLAIM',
                     'status'         => 'PAID',
                 ]);
@@ -198,8 +229,9 @@ class EProductCheckoutController extends Controller
     public function purchaseCourse(Request $request)
     {
         $request->validate([
-            'course_id'     => 'required|exists:courses,id',
+            'course_id'    => 'required|exists:courses,id',
             'payment_proof' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:5120',
+            'voucher_code'  => 'nullable|string',
         ]);
 
         $user   = $request->user();
@@ -218,17 +250,46 @@ class EProductCheckoutController extends Controller
         $totalAmount = (int) $course->price;
         $merchantRef = 'INV-CRS-' . strtoupper(Str::random(8)) . '-' . $user->id;
 
+        // ==========================================
+        // APLIKASI VOUCHER (JIKA ADA)
+        // ==========================================
+        $voucherCode    = null;
+        $discountAmount = 0;
+
+        if ($request->filled('voucher_code')) {
+            $voucherInput = strtoupper(trim($request->voucher_code));
+            $voucher = Voucher::where('code', $voucherInput)->first();
+
+            if (!$voucher || !$voucher->isValid()) {
+                return response()->json(['success' => false, 'message' => 'Kode voucher tidak valid atau sudah tidak berlaku.'], 422);
+            }
+
+            if ($voucher->applicable_to !== 'all' && $voucher->applicable_to !== 'course') {
+                return response()->json(['success' => false, 'message' => 'Voucher ini tidak berlaku untuk Kursus.'], 422);
+            }
+
+            if ($totalAmount < $voucher->min_purchase) {
+                return response()->json(['success' => false, 'message' => 'Total pembelian tidak memenuhi minimum penggunaan voucher.'], 422);
+            }
+
+            $discountAmount = $voucher->calculateDiscount($totalAmount);
+            $totalAmount    = max(0, $totalAmount - $discountAmount);
+            $voucherCode    = $voucher->code;
+        }
+
         DB::beginTransaction();
         try {
             // JIKA GRATIS
             if ($totalAmount == 0) {
                 CourseEnrollment::create([
-                    'reference'      => $merchantRef,
-                    'user_id'        => $user->id,
-                    'course_id'      => $course->id,
-                    'amount'         => 0,
-                    'payment_method' => 'FREE_CLAIM',
-                    'status'         => 'PAID',
+                    'reference'       => $merchantRef,
+                    'user_id'         => $user->id,
+                    'course_id'       => $course->id,
+                    'amount'          => 0,
+                    'voucher_code'    => $voucherCode,
+                    'discount_amount' => $discountAmount,
+                    'payment_method'  => 'FREE_CLAIM',
+                    'status'          => 'PAID',
                 ]);
 
                 DB::commit();
@@ -254,6 +315,8 @@ class EProductCheckoutController extends Controller
                 'user_id'          => $user->id,
                 'course_id'        => $course->id,
                 'amount'           => $totalAmount,
+                'voucher_code'     => $voucherCode,
+                'discount_amount'  => $discountAmount,
                 'payment_method'   => 'MANUAL_QRIS',
                 'payment_proof'    => $paymentPath,
                 'status'           => 'PAID', // 🔥 AUTO-APPROVE: Langsung PAID, Admin cek mutasi belakangan
