@@ -167,6 +167,10 @@ class EProductCheckoutController extends Controller
                     Cart::where('user_id', $user->id)->delete();
                 }
 
+                if (isset($voucher) && $voucher) {
+                    $voucher->increment('used_count');
+                }
+
                 DB::commit();
                 return response()->json([
                     'success'  => true,
@@ -204,6 +208,10 @@ class EProductCheckoutController extends Controller
 
             if (!$isDirectBuy) {
                 Cart::where('user_id', $user->id)->delete();
+            }
+
+            if (isset($voucher) && $voucher) {
+                $voucher->increment('used_count');
             }
             
             DB::commit();
@@ -292,6 +300,10 @@ class EProductCheckoutController extends Controller
                     'status'          => 'PAID',
                 ]);
 
+                if (isset($voucher) && $voucher) {
+                    $voucher->increment('used_count');
+                }
+
                 DB::commit();
                 return response()->json([
                     'success' => true,
@@ -321,6 +333,10 @@ class EProductCheckoutController extends Controller
                 'payment_proof'    => $paymentPath,
                 'status'           => 'PAID', // 🔥 AUTO-APPROVE: Langsung PAID, Admin cek mutasi belakangan
             ]);
+
+            if (isset($voucher) && $voucher) {
+                $voucher->increment('used_count');
+            }
 
             DB::commit();
             return response()->json([
