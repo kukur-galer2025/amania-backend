@@ -9,6 +9,40 @@ use Illuminate\Http\Request;
 class VoucherController extends Controller
 {
     /**
+     * Dapatkan daftar voucher yang sedang aktif untuk member / publik.
+     */
+    public function available(Request $request)
+    {
+        $type = $request->query('type'); // 'e_product' | 'course' | null
+
+        $query = Voucher::where('is_active', true)
+            ->where(function ($q) {
+                $q->whereNull('expires_at')
+                  ->orWhere('expires_at', '>', now());
+            })
+            ->where(function ($q) {
+                $q->whereNull('max_uses')
+                  ->orWhereRaw('used_count < max_uses');
+            });
+
+        if ($type && in_array($type, ['e_product', 'course'])) {
+            $query->whereIn('applicable_to', ['all', $type]);
+        }
+
+        $vouchers = $query->orderBy('discount_value', 'desc')
+            ->select([
+                'id', 'code', 'name', 'discount_type',
+                'discount_value', 'min_purchase', 'applicable_to', 'expires_at'
+            ])
+            ->get();
+
+        return response()->json([
+            'success' => true,
+            'data'    => $vouchers,
+        ]);
+    }
+
+    /**
      * Validasi kode voucher dan hitung diskon untuk member.
      *
      * Request:

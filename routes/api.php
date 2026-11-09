@@ -78,6 +78,7 @@ Route::get('/articles/{slug}', [ArticleController::class, 'show']);
 Route::get('/leaderboard', [LeaderboardController::class, 'index']);
 Route::get('/advertisements', [AdvertisementController::class, 'index']);
 Route::get('/global-search', [GlobalSearchController::class, 'search']);
+Route::get('/vouchers/available', [VoucherController::class, 'available']);
 
 Route::get('/e-products', [EProductController::class, 'index']);
 Route::get('/e-products/{slug}', [EProductController::class, 'show']);
