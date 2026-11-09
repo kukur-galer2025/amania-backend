@@ -64,12 +64,12 @@ class VoucherController extends Controller
     {
         $request->validate([
             'code'   => 'required|string',
-            'amount' => 'required|integer|min:0',
+            'amount' => 'required|numeric|min:0',
             'type'   => 'required|in:e_product,course,event',
         ]);
 
         $code   = strtoupper(trim($request->code));
-        $amount = (int) $request->amount;
+        $amount = (int) round($request->amount);
         $type   = $request->type;
 
         $cleanCode = str_replace(' ', '', $code);
@@ -84,10 +84,30 @@ class VoucherController extends Controller
             ], 404);
         }
 
-        if (!$voucher->isValid()) {
+        if (!$voucher->is_active) {
             return response()->json([
                 'success' => false,
-                'message' => 'Voucher sudah tidak berlaku (expired, habis kuota, atau dinonaktifkan).',
+                'message' => "Voucher '{$voucher->code}' sedang dinonaktifkan.",
+            ], 422);
+        }
+
+        if ($voucher->expires_at !== null) {
+            $expiry = $voucher->expires_at->copy();
+            if ($expiry->format('H:i:s') === '00:00:00' || $expiry->isToday()) {
+                $expiry = $expiry->endOfDay();
+            }
+            if ($expiry->isPast()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => "Voucher '{$voucher->code}' sudah kedaluwarsa pada " . $voucher->expires_at->format('d M Y') . ".",
+                ], 422);
+            }
+        }
+
+        if ($voucher->max_uses !== null && $voucher->used_count >= $voucher->max_uses) {
+            return response()->json([
+                'success' => false,
+                'message' => "Batas pemakaian voucher '{$voucher->code}' sudah habis ({$voucher->used_count}/{$voucher->max_uses}).",
             ], 422);
         }
 
@@ -110,7 +130,7 @@ class VoucherController extends Controller
         if ($amount < $voucher->min_purchase) {
             return response()->json([
                 'success' => false,
-                'message' => 'Total pembelian tidak memenuhi minimum penggunaan voucher (Rp ' . number_format($voucher->min_purchase, 0, ',', '.') . ').',
+                'message' => "Syarat minimum pembelian voucher ini adalah Rp " . number_format($voucher->min_purchase, 0, ',', '.') . " (harga saat ini: Rp " . number_format($amount, 0, ',', '.') . ").",
             ], 422);
         }
 

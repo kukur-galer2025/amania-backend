@@ -35,10 +35,11 @@ class Voucher extends Model
         }
 
         if ($this->expires_at !== null) {
-            // Jika jam 00:00:00 (user hanya pilih tanggal di picker), anggap berlaku sampai akhir hari
-            $expiry = $this->expires_at->format('H:i:s') === '00:00:00'
-                ? $this->expires_at->copy()->endOfDay()
-                : $this->expires_at;
+            $expiry = $this->expires_at->copy();
+            // Jika jam 00:00:00 atau tanggalnya hari ini, beri toleransi sampai akhir hari ini (23:59:59)
+            if ($expiry->format('H:i:s') === '00:00:00' || $expiry->isToday()) {
+                $expiry = $expiry->endOfDay();
+            }
 
             if ($expiry->isPast()) {
                 return false;
